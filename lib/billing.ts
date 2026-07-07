@@ -160,36 +160,88 @@ export async function changePlanOrCheckout(
 }
 
 /**
+ * กติกา ordering/idempotency (pure) — event ที่เข้ามาควรถูก apply ไหม
+ * - แถวยังไม่เคยมี event_ts (null) → apply ได้เสมอ (แถวเก่า/แถวจาก admin comp)
+ * - incoming ใหม่กว่าหรือเท่ากับที่เก็บไว้ → apply (เท่ากับ = re-delivery เดิม เขียนทับค่าเดิม)
+ * - incoming เก่ากว่า → ข้าม (กัน event มาสลับลำดับ ฟื้น sub ที่ตายแล้ว/ทับ sub ใหม่ด้วยตัวเก่า)
+ * ตรงกับเงื่อนไข WHERE ใน SUBSCRIPTION_UPSERT_SQL — เก็บเป็นฟังก์ชันแยกเพื่อ unit-test ได้
+ */
+export function shouldApplyEvent(
+  storedTs: number | null,
+  incomingTs: number,
+): boolean {
+  if (storedTs === null) return true;
+  return incomingTs >= storedTs;
+}
+
+/**
+ * SQL upsert แถว subscriptions พร้อม guard ordering ผ่าน event_ts (ดู migration 27)
+ * export ไว้ให้ integration test รันตรงกับของจริง (กัน SQL ในเทสต์ drift จากโปรดักชัน)
+ */
+export const SUBSCRIPTION_UPSERT_SQL = `insert into subscriptions
+     (org_id, stripe_subscription_id, status, price_id, current_period_end, event_ts, updated_at)
+   values ($1,$2,$3,$4,$5, to_timestamp($6), now())
+   on conflict (org_id) do update set
+     stripe_subscription_id = excluded.stripe_subscription_id,
+     status = excluded.status,
+     price_id = excluded.price_id,
+     current_period_end = excluded.current_period_end,
+     event_ts = excluded.event_ts,
+     updated_at = now()
+   where subscriptions.event_ts is null
+      or excluded.event_ts >= subscriptions.event_ts`;
+
+/**
  * เขียนสถานะ subscription ของ org ลงตาราง subscriptions (upsert on conflict org_id)
  * — ใช้ร่วมกันระหว่าง Stripe webhook และ checkout route (route sync ทันที ไม่รอ webhook)
+ *
+ * @param eventTs เวลาเกิด event (unix วินาที) จาก Stripe — ใช้จัดลำดับ/กันซ้ำ.
+ *   route sync (ทำทันทีจากผลลัพธ์ที่ Stripe คืนมา) ไม่ส่งค่านี้ → ใช้ "now" ซึ่งใหม่ที่สุดเสมอ.
  */
 export async function syncSubscriptionRow(
   orgId: string,
   sub: StripeSubscriptionLite,
+  eventTs?: number,
 ): Promise<void> {
   const { query } = await import("@/lib/db");
 
   const item = sub.items.data[0];
   // current_period_end อยู่บน subscription item (Stripe API ใหม่) หรือ subscription (เก่า)
   const periodEnd = item?.current_period_end ?? sub.current_period_end ?? null;
+  const ts = eventTs ?? Math.floor(Date.now() / 1000);
 
-  await query(
-    `insert into subscriptions (org_id, stripe_subscription_id, status, price_id, current_period_end, updated_at)
-     values ($1,$2,$3,$4,$5, now())
-     on conflict (org_id) do update set
-       stripe_subscription_id = excluded.stripe_subscription_id,
-       status = excluded.status,
-       price_id = excluded.price_id,
-       current_period_end = excluded.current_period_end,
-       updated_at = now()`,
-    [
-      orgId,
-      sub.id,
-      sub.status,
-      item?.price?.id ?? null,
-      periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-    ],
-  );
+  await query(SUBSCRIPTION_UPSERT_SQL, [
+    orgId,
+    sub.id,
+    sub.status,
+    item?.price?.id ?? null,
+    periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+    ts,
+  ]);
+}
+
+// ============================================================
+// การรวมแพ็กจริงกับ comp_plan (admin แถม) — เก็บเป็น pure function ที่นี่
+// เพราะ lib/plans.ts import ผ่าน alias "@/" (เทสต์ node --test resolve ไม่ได้)
+// ส่วน lib/billing.ts import ได้ → unit-test ตรรกะ floor ได้จริง ไม่ต้อง reimplement
+// ============================================================
+
+export type PlanTierId = "free" | "pro" | "premium";
+const TIER_RANK: Record<PlanTierId, number> = { free: 0, pro: 1, premium: 2 };
+
+/**
+ * รวมแพ็กจริง (จาก Stripe/trial) กับ comp_plan (admin แถม) — comp ทำหน้าที่เป็น "พื้น" (floor):
+ * ยกระดับได้อย่างเดียว ห้ามลดต่ำกว่าสิทธิ์ที่จ่ายเงินจริง.
+ * ป้องกันเคส comp='free' ทับ Stripe Premium → ลูกค้าจ่ายเงินแต่ถูกล็อกเป็น free.
+ */
+export function resolvePlanWithComp(
+  realPlan: PlanTierId,
+  compPlan: string | null | undefined,
+): PlanTierId {
+  const comp =
+    compPlan && compPlan in TIER_RANK ? (compPlan as PlanTierId) : null;
+  if (comp && TIER_RANK[comp] > TIER_RANK[realPlan]) return comp;
+  return realPlan;
 }
 
 export { SITE_URL };

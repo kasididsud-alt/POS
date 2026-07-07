@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 import { generateApiKey } from "@/lib/api-keys";
+import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -21,6 +22,8 @@ export async function createApiKey(
 ): Promise<Result & { key?: string }> {
   try {
     const ctx = await requireOwner();
+    // API key / การเชื่อมต่อ = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (กันแพ็กต่ำ mint key)
+    assertPlanAllows(ctx.subscription, "/integrations");
     const name = String(formData.get("name") ?? "").trim() || "API key";
 
     const count = await one<{ n: number }>(

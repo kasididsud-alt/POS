@@ -1,6 +1,6 @@
 import type { Subscription } from "@/lib/types";
-import { isSubscriptionActive } from "@/lib/auth";
 import { planFromPriceId } from "@/lib/stripe";
+import { resolvePlanWithComp } from "@/lib/billing";
 
 export type PlanId = "free" | "pro" | "premium";
 export type PlanInterval = "monthly" | "yearly";
@@ -86,20 +86,41 @@ export function planRank(p: PlanId): number {
   return RANK[p];
 }
 
+/** subscription จ่ายเงิน/ทดลอง ยังมีผลไหม — เวอร์ชันที่ "ไม่สน comp" (comp คิดแยกใน planForOrg) */
+function paidActive(sub: Subscription | null): boolean {
+  if (!sub) return false;
+  const now = Date.now();
+  if (sub.status === "active") return true;
+  if (sub.status === "trialing") {
+    if (!sub.trial_ends_at) return true;
+    return new Date(sub.trial_ends_at).getTime() > now;
+  }
+  return false;
+}
+
+/** แพ็กจริงจาก subscription (Stripe/trial) — ไม่รวม comp_plan */
+function realPlanFromSub(sub: Subscription | null): PlanId {
+  if (!paidActive(sub)) return "free";
+  const byPrice = sub?.price_id ? planFromPriceId(sub.price_id)?.plan : null;
+  if (byPrice) return byPrice;
+  if (sub?.status === "trialing") return "pro";
+  return "free";
+}
+
 /**
  * แพ็กปัจจุบันของ org — derive จาก subscription
  * - DEV_PLAN env ใช้ override ตอน local/ทดสอบ (ยังไม่มี Stripe)
  * - trialing (ไม่มี price) = ได้ Pro ระหว่างทดลอง
  * - อื่นๆ / หมดอายุ = free
+ *
+ * comp_plan (ผู้ดูแลระบบแถมแพ็กให้) ทำหน้าที่เป็น "พื้น" (floor) — ยกระดับได้อย่างเดียว
+ * ห้ามลดต่ำกว่าสิทธิ์ที่จ่ายเงินจริง. ป้องกันเคส admin ตั้ง comp='free' บนร้านที่มี Stripe
+ * Premium อยู่ แล้วลูกค้าถูกล็อกเป็น free ทั้งที่ยังโดนเรียกเก็บเงิน.
  */
 export function planForOrg(sub: Subscription | null): PlanId {
   const dev = process.env.DEV_PLAN as PlanId | undefined;
   if (dev && dev in PLANS) return dev;
-  // ผู้ดูแลระบบ comp แพ็กเกจให้ = ใช้ค่านั้นทันที (override subscription จริง)
-  if (sub?.comp_plan && sub.comp_plan in PLANS) return sub.comp_plan as PlanId;
-  if (!isSubscriptionActive(sub)) return "free";
-  const byPrice = sub?.price_id ? planFromPriceId(sub.price_id)?.plan : null;
-  if (byPrice) return byPrice;
-  if (sub?.status === "trialing") return "pro";
-  return "free";
+
+  const real = realPlanFromSub(sub);
+  return resolvePlanWithComp(real, sub?.comp_plan);
 }

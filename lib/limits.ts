@@ -25,6 +25,22 @@ export function requirePlanForPath(ctx: OrgContext, path: string): void {
 }
 
 /**
+ * เช็คสิทธิ์แพ็กแบบ "โยน error" (ไม่ redirect) — สำหรับ server action ที่ครอบ try/catch
+ * แล้วคืน { ok:false, error }. ใช้ redirect() ในนั้นไม่ได้ เพราะ NEXT_REDIRECT จะถูก catch
+ * กลืนจน redirect ไม่ทำงาน. gating ที่ layout ทำงานแค่ตอน render หน้า — server action
+ * เป็น endpoint แยก เรียกตรงได้ จึงต้อง gate ในตัว action เองด้วย (กันแพ็กต่ำเรียกฟีเจอร์จ่ายเงิน).
+ */
+export function assertPlanAllows(sub: Subscription | null, path: string): void {
+  const plan = planForOrg(sub);
+  if (!planAllowsPath(plan, path)) {
+    const need = minPlanForPath(path);
+    throw new Error(
+      `ต้องใช้แพ็ก “${PLANS[need].name}” ขึ้นไปจึงจะใช้ฟีเจอร์นี้ได้ — อัปเกรดที่หน้าแพ็กเกจ`,
+    );
+  }
+}
+
+/**
  * เช็คก่อนเพิ่มสินค้าใหม่ — คืนข้อความ error ถ้าถึงลิมิตแพ็ก (else null)
  * (Infinity = ไม่จำกัด → ไม่ต้องเช็ค)
  */
@@ -36,8 +52,15 @@ export async function productLimitError(
   const max = PLANS[plan].limits.products;
   if (!Number.isFinite(max)) return null;
 
+  // นับเฉพาะสินค้าที่ยัง active — deleteProduct เป็น soft delete (is_active=false)
+  // ถ้านับรวมของที่ลบแล้ว โควตาจะเต็มถาวรทั้งที่ผู้ใช้เห็นสินค้าน้อยกว่าลิมิต (list/API กรอง is_active)
+  //
+  // NOTE (P2-6, ยังไม่แก้ที่นี่): check-then-insert — count ที่นี่กับ insert ในตัว action
+  // เป็นคนละ statement ไม่มี lock/serialize → หลาย request พร้อมกันเลี่ยงเพดานได้.
+  // การแก้จริงต้องอยู่ที่ path insert (products/actions.ts — นอกขอบเขตงานนี้):
+  // ทำ check+insert ใน statement เดียว หรือ pg_advisory_xact_lock(hashtext(org_id)) ครอบ.
   const rows = await query<{ n: number }>(
-    "select count(*)::int as n from products where org_id = $1",
+    "select count(*)::int as n from products where org_id = $1 and is_active = true",
     [orgId],
   );
   const n = Number(rows[0]?.n ?? 0);

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
+import { logAudit } from "@/lib/audit";
 
 type Result = { ok: boolean; error?: string; message?: string };
 
@@ -25,7 +26,7 @@ export async function setOrgPlan(
   plan: CompPlan | "clear",
 ): Promise<Result> {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     if (!orgId) return { ok: false, error: "ไม่พบร้าน" };
 
     if (plan === "clear") {
@@ -33,6 +34,7 @@ export async function setOrgPlan(
         "update subscriptions set comp_plan = null, updated_at = now() where org_id = $1",
         [orgId],
       );
+      await logAudit(orgId, admin.id, "admin.comp_plan", "clear");
       revalidateOrg(orgId);
       return { ok: true, message: "ยกเลิก comp แพ็กเกจแล้ว (กลับไปคิดตามจริง)" };
     }
@@ -48,6 +50,7 @@ export async function setOrgPlan(
          set comp_plan = excluded.comp_plan, updated_at = now()`,
       [orgId, plan],
     );
+    await logAudit(orgId, admin.id, "admin.comp_plan", plan);
     revalidateOrg(orgId);
     return { ok: true, message: `ตั้งแพ็กเกจเป็น ${plan.toUpperCase()} แล้ว` };
   } catch (e) {
@@ -61,9 +64,30 @@ export async function extendTrial(
   days: number,
 ): Promise<Result> {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     if (!orgId) return { ok: false, error: "ไม่พบร้าน" };
     const d = Number.isFinite(days) && days > 0 ? Math.floor(days) : 14;
+
+    // กันเขียนทับ subscription ที่จ่ายเงินจริงบน Stripe: ถ้าตั้ง status='trialing' ทับ
+    // ร้านที่ status='active' + มี stripe_subscription_id จะเพี้ยนจาก Stripe แล้วพอ
+    // trial_ends_at ผ่านไป (Stripe ไม่ยิง event เพราะยังคิดว่า active) ร้านจะโดน
+    // ดาวน์เกรดเป็น free เงียบๆ ทั้งที่ยังถูกเรียกเก็บเงิน. อยากแถมสิทธิ์ให้ใช้ comp แทน.
+    const cur = await one<{
+      status: string;
+      stripe_subscription_id: string | null;
+      price_id: string | null;
+    }>(
+      "select status, stripe_subscription_id, price_id from subscriptions where org_id = $1",
+      [orgId],
+    );
+    if (cur && (cur.stripe_subscription_id || cur.status === "active")) {
+      return {
+        ok: false,
+        error:
+          "ร้านนี้มี subscription จ่ายเงินจริงอยู่ — ห้ามยืด trial ทับ (จะเพี้ยนจาก Stripe) ถ้าต้องการแถมสิทธิ์ให้ใช้ comp แพ็กเกจแทน",
+      };
+    }
+
     await query(
       `insert into subscriptions (org_id, status, trial_ends_at)
          values ($1, 'trialing', now() + make_interval(days => $2))
@@ -73,6 +97,7 @@ export async function extendTrial(
              updated_at = now()`,
       [orgId, d],
     );
+    await logAudit(orgId, admin.id, "admin.extend_trial", `${d} days`);
     revalidateOrg(orgId);
     return { ok: true, message: `ยืดทดลองใช้อีก ${d} วันแล้ว` };
   } catch (e) {
@@ -87,7 +112,7 @@ export async function setMemberRole(
   role: "owner" | "cashier",
 ): Promise<Result> {
   try {
-    await requireAdmin();
+    const admin = await requireAdmin();
     if (role !== "owner" && role !== "cashier")
       return { ok: false, error: "สิทธิ์ไม่ถูกต้อง" };
 
@@ -112,6 +137,7 @@ export async function setMemberRole(
       "update memberships set role = $1 where org_id = $2 and user_id = $3",
       [role, orgId, userId],
     );
+    await logAudit(orgId, admin.id, "admin.set_role", `${userId} → ${role}`);
     revalidateOrg(orgId);
     return { ok: true, message: "เปลี่ยนสิทธิ์แล้ว" };
   } catch (e) {

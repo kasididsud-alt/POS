@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -11,12 +12,15 @@ async function requireOrg() {
   if (!ctx?.org) throw new Error("unauthorized");
   if (ctx.membership?.role !== "owner")
     throw new Error("เฉพาะเจ้าของร้านเท่านั้น");
-  return ctx.org.id;
+  return ctx;
 }
 
 export async function saveBranch(formData: FormData): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    const ctx = await requireOrg();
+    // สาขา/คลัง = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    assertPlanAllows(ctx.subscription, "/branches");
+    const orgId = ctx.org!.id;
     const id = String(formData.get("id") ?? "").trim();
     const name = String(formData.get("name") ?? "").trim();
     const type = String(formData.get("type") ?? "shop");
@@ -47,7 +51,8 @@ export async function saveBranch(formData: FormData): Promise<Result> {
 
 export async function deleteBranch(id: string): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดต้องลบสาขาส่วนเกินเพื่อกลับมาตามลิมิตได้
+    const orgId = (await requireOrg()).org!.id;
 
     const b = await one<{ is_default: boolean }>(
       "select is_default from branches where id=$1 and org_id=$2",

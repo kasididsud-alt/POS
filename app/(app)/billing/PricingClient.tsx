@@ -19,6 +19,7 @@ export default function PricingClient({
   free,
   paid,
   current,
+  currentInterval,
   isOwner,
   stripeReady,
   banner,
@@ -28,6 +29,8 @@ export default function PricingClient({
   free: ClientPlan;
   paid: ClientPlan[];
   current: "free" | "pro" | "premium";
+  /** รอบบิลของแพ็กปัจจุบัน (null = ไม่รู้ เช่น trial ที่ยังไม่มี price) */
+  currentInterval: "monthly" | "yearly" | null;
   isOwner: boolean;
   stripeReady: boolean;
   banner: "success" | "canceled" | "error" | "upgrade" | null;
@@ -107,7 +110,14 @@ export default function PricingClient({
         {[free, ...paid].map((p) => {
           const price = yearly ? p.yearly : p.monthly;
           const per = p.monthly === 0 ? "" : yearly ? "บาท/ปี" : "บาท/เดือน";
-          const isCurrent = current === p.id;
+          const isCurrentPlan = current === p.id;
+          // "ตรงทั้งแพ็กและรอบบิล" → ปุ่มปิด. แพ็กเดิมแต่คนละรอบบิล → เปิดให้สลับรอบบิลได้
+          // (currentInterval null = ไม่รู้รอบบิล เช่น trial → ถือว่าตรง เพื่อไม่ให้ปุ่มเป็น noop)
+          const isCurrentExact =
+            isCurrentPlan &&
+            (p.id === "free" ||
+              currentInterval === null ||
+              interval === currentInterval);
           const isDowngrade = RANK[p.id] < RANK[current];
 
           return (
@@ -117,7 +127,7 @@ export default function PricingClient({
                 p.highlight ? "ring-2 ring-[var(--primary,#0e7a43)]" : ""
               }`}
             >
-              {isCurrent && (
+              {isCurrentPlan && (
                 <span className="absolute right-4 top-4 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                   แพ็กปัจจุบัน
                 </span>
@@ -147,11 +157,11 @@ export default function PricingClient({
                   <button
                     className="btn-outline w-full"
                     disabled
-                    title={isCurrent ? "แพ็กปัจจุบัน" : "แพ็กพื้นฐาน"}
+                    title={isCurrentPlan ? "แพ็กปัจจุบัน" : "แพ็กพื้นฐาน"}
                   >
-                    {isCurrent ? "แพ็กปัจจุบัน" : "แพ็กพื้นฐาน"}
+                    {isCurrentPlan ? "แพ็กปัจจุบัน" : "แพ็กพื้นฐาน"}
                   </button>
-                ) : isCurrent ? (
+                ) : isCurrentExact ? (
                   <button className="btn-outline w-full" disabled>
                     แพ็กปัจจุบัน
                   </button>
@@ -163,7 +173,13 @@ export default function PricingClient({
                       className={`w-full ${p.highlight ? "btn-primary" : "btn-outline"}`}
                       disabled={!isOwner || !stripeReady}
                     >
-                      {isDowngrade ? "เปลี่ยนเป็นแพ็กนี้" : "อัปเกรดเป็นแพ็กนี้"}
+                      {isCurrentPlan
+                        ? yearly
+                          ? "เปลี่ยนเป็นรายปี"
+                          : "เปลี่ยนเป็นรายเดือน"
+                        : isDowngrade
+                          ? "เปลี่ยนเป็นแพ็กนี้"
+                          : "อัปเกรดเป็นแพ็กนี้"}
                     </button>
                   </form>
                 )}

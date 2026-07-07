@@ -1,0 +1,15 @@
+-- ============================================================
+-- Webhook idempotency / ordering guard
+-- ------------------------------------------------------------
+-- Stripe ไม่การันตีลำดับการส่ง event และ retry ได้นานถึง 3 วัน จึงอาจมี event
+-- มาสลับลำดับหรือซ้ำ (เช่น subscription.updated รุ่นเก่าตามมาหลัง subscription.deleted
+-- แล้ว "ฟื้น" subscription ที่ยกเลิกไปแล้ว → ลูกค้าได้แพ็กจ่ายเงินฟรีตลอด).
+--
+-- เก็บ event_ts = เวลาเกิด event ล่าสุดที่ถูก apply ลงแถวนี้. syncSubscriptionRow()
+-- จะ apply เฉพาะ event ที่ event_ts ใหม่กว่าหรือเท่ากับค่าที่เก็บไว้ (เท่ากับ = idempotent
+-- re-delivery ของ event เดิม เขียนทับด้วยค่าเดิม ไม่มีผลเสีย).
+--
+-- แถวเก่าที่ยังไม่มี event_ts (null) จะยอมให้ apply event แรกได้เสมอ.
+-- comp_plan / trial_ends_at ถูกจัดการคนละ path (admin action) และเป็นคนละคอลัมน์
+-- จึงไม่ถูกแตะโดย guard นี้.
+alter table subscriptions add column if not exists event_ts timestamptz;
