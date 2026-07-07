@@ -24,23 +24,30 @@ export default async function ShiftsPage({
   const orgId = ctx.org.id;
   const sp = await searchParams;
 
+  // กะของสาขาปัจจุบันเท่านั้น (กะเก่าก่อนแยกสาขา branch_id เป็น null → ยังมองเห็น)
   const current = await one<Shift>(
-    "select * from cash_shifts where org_id=$1 and status='open' order by opened_at desc limit 1",
-    [orgId],
+    `select * from cash_shifts
+      where org_id=$1 and status='open' and (branch_id = $2 or branch_id is null)
+      order by opened_at desc limit 1`,
+    [orgId, ctx.branchId],
   );
 
   let liveSales = 0;
   if (current) {
     const r = await one<{ total: number }>(
-      "select coalesce(sum(total),0) as total from sales where org_id=$1 and payment_method='cash' and created_at >= $2",
-      [orgId, current.opened_at],
+      `select coalesce(sum(total),0) as total from sales
+        where org_id=$1 and payment_method='cash' and created_at >= $2
+          and ($3::uuid is null or branch_id = $3)`,
+      [orgId, current.opened_at, ctx.branchId],
     );
     liveSales = Number(r?.total ?? 0);
   }
 
   const history = await query<Shift>(
-    "select * from cash_shifts where org_id=$1 and status='closed' order by closed_at desc limit 20",
-    [orgId],
+    `select * from cash_shifts
+      where org_id=$1 and status='closed' and (branch_id = $2 or branch_id is null)
+      order by closed_at desc limit 20`,
+    [orgId, ctx.branchId],
   );
 
   return (
