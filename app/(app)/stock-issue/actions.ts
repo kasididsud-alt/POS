@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { query } from "@/lib/db";
+import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 
 type Result = { ok: boolean; error?: string };
@@ -15,9 +15,16 @@ export async function issueStock(formData: FormData): Promise<Result> {
     const qty = Number(formData.get("qty") ?? 0);
     const reasonLabel = String(formData.get("reason_label") ?? "เบิกใช้");
     const note = String(formData.get("note") ?? "").trim();
-    if (!productId || qty <= 0)
-      return { ok: false, error: "ระบุสินค้าและจำนวน (มากกว่า 0)" };
+    if (!productId || !Number.isInteger(qty) || qty <= 0)
+      return { ok: false, error: "ระบุสินค้าและจำนวน (จำนวนเต็ม มากกว่า 0)" };
     if (!ctx.branchId) return { ok: false, error: "ยังไม่ได้กำหนดสาขา" };
+
+    // สินค้าต้องเป็นของร้านนี้ — กันยิงข้าม org
+    const product = await one(
+      "select id from products where id=$1 and org_id=$2",
+      [productId, ctx.org.id],
+    );
+    if (!product) return { ok: false, error: "ไม่พบสินค้านี้ในร้าน" };
 
     const fullNote = [reasonLabel, note].filter(Boolean).join(" — ");
     await query(

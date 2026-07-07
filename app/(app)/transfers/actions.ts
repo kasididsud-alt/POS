@@ -20,8 +20,24 @@ export async function createTransfer(input: {
       return { ok: false, error: "เลือกสาขาต้นทางและปลายทาง" };
     if (input.from_branch_id === input.to_branch_id)
       return { ok: false, error: "ต้นทางและปลายทางต้องต่างกัน" };
-    const items = (input.items ?? []).filter((i) => i.product_id && i.qty > 0);
+    const items = (input.items ?? []).filter(
+      (i) => i.product_id && Number.isInteger(i.qty) && i.qty > 0,
+    );
     if (!items.length) return { ok: false, error: "เพิ่มรายการอย่างน้อย 1" };
+
+    // สาขาต้นทาง/ปลายทางต้องเป็นของร้านนี้ — กันยิงข้าม org
+    const branchIds = new Set(ctx.branches.map((b) => b.id));
+    if (!branchIds.has(input.from_branch_id) || !branchIds.has(input.to_branch_id))
+      return { ok: false, error: "ไม่พบสาขานี้ในร้าน" };
+
+    // สินค้าทุกตัวต้องเป็นของร้านนี้
+    const productIds = items.map((i) => i.product_id);
+    const owned = await query<{ id: string }>(
+      "select id from products where org_id=$1 and id = any($2::uuid[])",
+      [ctx.org.id, productIds],
+    );
+    if (owned.length !== new Set(productIds).size)
+      return { ok: false, error: "มีสินค้าที่ไม่พบในร้าน" };
 
     await query("select create_transfer($1,$2,$3,$4::jsonb,$5,$6)", [
       ctx.org.id,
