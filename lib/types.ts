@@ -148,19 +148,11 @@ export type SaleItem = {
   line_total: number;
 };
 
-// รายการในตะกร้าฝั่ง POS
+// รายการในตะกร้าฝั่ง POS (ใช้แสดงผลใน UI เท่านั้น —
+// ตอน checkout ส่งเข้า server แค่ product_id + qty ราคาอ่านจาก DB)
 export type CartLine = {
   product_id: string;
   name: string;
   unit_price: number;
   qty: number;
-};
-
-// payload ส่งเข้า RPC checkout_sale
-export type CheckoutPayload = {
-  _org_id: string;
-  _items: CartLine[];
-  _payment_method: PaymentMethod;
-  _discount: number;
-  _cash_received: number | null;
 };

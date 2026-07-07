@@ -4,10 +4,9 @@ import { revalidatePath } from "next/cache";
 import { one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 
+// ส่งแค่ product_id + qty — ราคาคืนคิดจากราคาขายจริง (sale_items) ฝั่ง DB
 type ReturnLine = {
-  product_id: string | null;
-  name: string;
-  unit_price: number;
+  product_id: string;
   qty: number;
 };
 
@@ -29,7 +28,9 @@ export async function processReturn(
   const ctx = await getAppContext();
   if (!ctx?.org) return { ok: false, error: "unauthorized" };
 
-  const items = (input.items ?? []).filter((i) => i.qty > 0);
+  const items = (input.items ?? [])
+    .filter((i) => i.product_id && i.qty > 0)
+    .map(({ product_id, qty }) => ({ product_id, qty }));
   if (!items.length) return { ok: false, error: "เลือกรายการที่ต้องการคืนอย่างน้อย 1" };
   if (!ctx.branchId) return { ok: false, error: "ยังไม่ได้กำหนดสาขา" };
 

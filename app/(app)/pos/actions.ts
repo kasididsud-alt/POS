@@ -4,10 +4,13 @@ import { revalidatePath } from "next/cache";
 import { one } from "@/lib/db";
 import { getAppContext, isSubscriptionActive } from "@/lib/auth";
 import { makePromptPayQR } from "@/lib/promptpay";
-import type { CartLine, PaymentMethod } from "@/lib/types";
+import type { PaymentMethod } from "@/lib/types";
+
+// ส่งแค่ product_id + qty — ราคาอ่านจาก DB ฝั่ง server (กัน client แก้ราคา)
+export type CheckoutItem = { product_id: string; qty: number };
 
 export type CheckoutInput = {
-  items: CartLine[];
+  items: CheckoutItem[];
   payment_method: PaymentMethod;
   discount: number;
   cash_received: number | null;
@@ -44,7 +47,10 @@ export async function checkoutAction(
       "select checkout_sale($1, $2::jsonb, $3, $4, $5, $6, $7, $8) as checkout_sale",
       [
         ctx.org.id,
-        JSON.stringify(input.items),
+        // ส่งเฉพาะ field ที่ RPC ใช้ — ตัด field แปลกปลอมจาก client ทิ้ง
+        JSON.stringify(
+          input.items.map(({ product_id, qty }) => ({ product_id, qty })),
+        ),
         input.payment_method,
         input.discount,
         input.cash_received,

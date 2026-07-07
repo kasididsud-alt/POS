@@ -244,12 +244,8 @@ export default function PosClient({
     setError(null);
     start(async () => {
       const res = await checkoutAction({
-        items: cart.map(({ product_id, name, unit_price, qty }) => ({
-          product_id,
-          name,
-          unit_price,
-          qty,
-        })),
+        // ส่งแค่ product_id + qty — ราคาคิดฝั่ง server จาก DB
+        items: cart.map(({ product_id, qty }) => ({ product_id, qty })),
         payment_method: method,
         discount: appliedDiscount,
         cash_received: method === "cash" ? Number(cashReceived || 0) : null,

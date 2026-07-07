@@ -45,14 +45,12 @@ export default function ReturnsClient({
   function submit() {
     if (!selected) return;
     setMsg(null);
+    // ส่งแค่ product_id + qty — ยอดคืนคิดจากราคาขายจริงฝั่ง server
     const items = selected.items
-      .map((it, i) => ({
-        product_id: it.product_id,
-        name: it.name,
-        unit_price: Number(it.unit_price),
-        qty: qtys[i] ?? 0,
-      }))
-      .filter((it) => it.qty > 0);
+      .map((it, i) => ({ product_id: it.product_id, qty: qtys[i] ?? 0 }))
+      .filter((it): it is { product_id: string; qty: number } =>
+        Boolean(it.product_id) && it.qty > 0,
+      );
     if (!items.length) {
       setMsg({ ok: false, text: "เลือกจำนวนที่จะคืนอย่างน้อย 1" });
       return;
@@ -125,9 +123,11 @@ export default function ReturnsClient({
                     type="number"
                     min={0}
                     max={it.qty}
-                    className="w-20 rounded border border-[var(--border)] px-2 py-1 text-right"
+                    className="w-20 rounded border border-[var(--border)] px-2 py-1 text-right disabled:opacity-40"
                     value={qtys[i] ?? ""}
                     placeholder="0"
+                    disabled={!it.product_id}
+                    title={!it.product_id ? "สินค้านี้ถูกลบไปแล้ว คืนผ่านระบบไม่ได้" : undefined}
                     onChange={(e) => {
                       const v = Math.min(
                         Math.max(0, parseInt(e.target.value) || 0),
