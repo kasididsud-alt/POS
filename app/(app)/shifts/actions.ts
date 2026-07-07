@@ -53,7 +53,18 @@ export async function closeShift(formData: FormData): Promise<void> {
         and ($3::uuid is null or branch_id = $3)`,
     [ctx.org.id, shift!.opened_at, shift!.branch_id],
   );
-  const expected = Number(shift!.opening_cash) + Number(cashSales?.total ?? 0);
+  // เงินคืนที่จ่ายออกจากลิ้นชักในกะนี้ (คืนของบิลเงินสด) — ลดเงินสดที่ควรมี
+  const cashRefunds = await one<{ total: number }>(
+    `select coalesce(sum(r.total_refund),0) as total
+       from sale_returns r join sales s on s.id = r.sale_id
+      where r.org_id=$1 and r.created_at >= $2 and s.payment_method='cash'
+        and ($3::uuid is null or s.branch_id = $3)`,
+    [ctx.org.id, shift!.opened_at, shift!.branch_id],
+  );
+  const expected =
+    Number(shift!.opening_cash) +
+    Number(cashSales?.total ?? 0) -
+    Number(cashRefunds?.total ?? 0);
 
   await query(
     `update cash_shifts set closing_cash=$1, expected_cash=$2, status='closed', closed_at=now()

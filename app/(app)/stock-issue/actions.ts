@@ -26,6 +26,19 @@ export async function issueStock(formData: FormData): Promise<Result> {
     );
     if (!product) return { ok: false, error: "ไม่พบสินค้านี้ในร้าน" };
 
+    // กันเบิกจนสต็อกสาขาติดลบ
+    const stock = await one<{ qty: number }>(
+      `select coalesce(sum(qty_change),0)::int as qty from stock_movements
+        where product_id=$1 and branch_id=$2`,
+      [productId, ctx.branchId],
+    );
+    const available = Number(stock?.qty ?? 0);
+    if (qty > available)
+      return {
+        ok: false,
+        error: `สต็อกสาขานี้เหลือ ${available} — เบิก ${qty} ไม่ได้`,
+      };
+
     const fullNote = [reasonLabel, note].filter(Boolean).join(" — ");
     await query(
       `insert into stock_movements (org_id, product_id, branch_id, qty_change, reason, note, created_by)
