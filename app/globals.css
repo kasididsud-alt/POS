@@ -1,26 +1,294 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --muted: #64748b;
+  --primary: #4f46e5;
+  --primary-fg: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --font-sans: var(--font-noto-thai);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* utility components */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none bg-[var(--primary)] text-[var(--primary-fg)] hover:opacity-90;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none border border-[var(--border)] bg-[var(--card)] hover:bg-slate-50;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none hover:bg-slate-100;
+  }
+  .card {
+    @apply rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-sm;
+  }
+  .input {
+    @apply w-full rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--primary)]/40;
+  }
+  .label {
+    @apply block text-sm font-medium text-slate-700 mb-1;
+  }
+}
+
+/* ============================================================
+   Landing page — อัตลักษณ์ "ใบเสร็จ + กระดาษบัญชี" (scope เฉพาะ .lp)
+   ============================================================ */
+.lp {
+  --paper: #fbf9f4;
+  --paper-2: #f3efe4;
+  --ink: #18221c;
+  --green: #0e7a43;
+  --green-d: #0a5c32;
+  --rule: #ddd6c4;
+  --stamp: #e0492b;
+  --muted2: #6f7a6f;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-noto-thai), sans-serif;
+  position: relative;
+  isolation: isolate;
+}
+
+/* พื้นหลัง: กริดจุดนวล + แสงเขียวจางหลัง hero (จางลงเมื่อเลื่อนลง) */
+.lp-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 44% at 50% 0%, rgba(14, 122, 67, 0.13), transparent 70%),
+    radial-gradient(rgba(20, 32, 26, 0.1) 1.3px, transparent 1.3px);
+  background-size:
+    100% 100%,
+    24px 24px;
+  background-repeat: no-repeat, repeat;
+  -webkit-mask-image: radial-gradient(135% 100% at 50% -5%, #000 52%, transparent 100%);
+  mask-image: radial-gradient(135% 100% at 50% -5%, #000 52%, transparent 100%);
+}
+.lp-display {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: -0.01em;
+}
+.lp-mono {
+  font-family: var(--font-mono), monospace;
+}
+
+/* กระดาษกราฟบัญชีจางๆ */
+.lp-ledger {
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: 30px 30px;
+  background-position: -1px -1px;
+  opacity: 0.5;
+}
+
+/* แถวรายการแบบใบเสร็จ มีจุดไข่ปลาเชื่อม */
+.lp-leader {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.lp-leader > .fill {
+  flex: 1 1 auto;
+  border-bottom: 2px dotted var(--rule);
+  transform: translateY(-4px);
+}
+
+/* เส้นปรุใบเสร็จ */
+.lp-perf {
+  border-top: 2px dashed var(--rule);
+}
+
+/* การ์ดสลิปใบเสร็จ + ขอบล่างหยักแบบฉีกกระดาษ */
+.lp-receipt {
+  background: #fff;
+  box-shadow: 0 24px 60px -28px rgba(24, 34, 28, 0.45);
+  -webkit-mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - 11px) no-repeat,
+    radial-gradient(11px at 11px 100%, #0000 98%, #000) bottom left / 22px 22px repeat-x;
+  mask:
+    linear-gradient(#000 0 0) top / 100% calc(100% - 11px) no-repeat,
+    radial-gradient(11px at 11px 100%, #0000 98%, #000) bottom left / 22px 22px repeat-x;
+  animation: lp-print 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes lp-print {
+  from {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0.5;
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+}
+
+/* ตั๋ว/ป้ายราคา มีรอยบากสองข้าง */
+.lp-ticket {
+  background: #fff;
+  -webkit-mask:
+    radial-gradient(circle 9px at 0 64px, #0000 9px, #000 0),
+    radial-gradient(circle 9px at 100% 64px, #0000 9px, #000 0);
+  -webkit-mask-composite: source-in;
+  mask:
+    radial-gradient(circle 9px at 0 64px, #0000 9px, #000 0),
+    radial-gradient(circle 9px at 100% 64px, #0000 9px, #000 0);
+  mask-composite: intersect;
+}
+
+/* แสตมป์หมึก */
+.lp-stamp {
+  font-family: var(--font-mono), monospace;
+  color: var(--stamp);
+  border: 2px solid var(--stamp);
+  border-radius: 6px;
+  padding: 4px 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transform: rotate(-7deg);
+  opacity: 0.92;
+}
+
+/* บาร์โค้ด CSS */
+.lp-barcode {
+  height: 44px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--ink) 0 2px,
+    transparent 2px 4px,
+    var(--ink) 4px 7px,
+    transparent 7px 9px,
+    var(--ink) 9px 10px,
+    transparent 10px 13px
+  );
+}
+
+.lp-btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold transition-transform;
+}
+.lp-btn-solid {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold transition-transform;
+  background: var(--green);
+  color: #fff;
+}
+.lp-btn-solid:hover {
+  background: var(--green-d);
+}
+.lp-btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold transition-colors;
+  border: 1.5px solid var(--ink);
+  color: var(--ink);
+}
+.lp-btn-ghost:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ระบบการ์ดใหม่ — เงานุ่ม ยกตอน hover */
+.lp-card {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgba(24, 34, 28, 0.04),
+    0 14px 30px -20px rgba(24, 34, 28, 0.28);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.lp-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 1px 2px rgba(24, 34, 28, 0.04),
+    0 24px 46px -22px rgba(14, 122, 67, 0.38);
+}
+
+/* ชิปไอคอน */
+.lp-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  background: rgba(14, 122, 67, 0.1);
+  font-size: 26px;
+  line-height: 1;
+}
+.lp-chip-lg {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  font-size: 32px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-receipt {
+    animation: none;
+  }
+  .lp-card:hover {
+    transform: none;
+  }
+}
+
+/* ============================================================
+   พิมพ์ใบเสร็จ/ใบกำกับภาษี — รองรับกระดาษความร้อน 58/80mm
+   (ขนาดหน้ากระดาษ @page ถูกฉีดจาก ThermalPrintButton)
+   ============================================================ */
+@media print {
+  main {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  /* กระดาษม้วน: การ์ดเต็มความกว้าง ไม่มีกรอบ/เงา */
+  html[data-paper="58"] main .card,
+  html[data-paper="80"] main .card {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 1.5mm !important;
+  }
+  /* A4: เอกสารเต็มรูป — เอาเงา/กรอบการ์ดออก ให้เต็มพื้นที่กระดาษ */
+  html[data-paper="a4"] main .card {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  html[data-paper="58"] {
+    font-size: 11px;
+  }
+  html[data-paper="80"] {
+    font-size: 12px;
+  }
+  /* บังคับหมึกดำล้วน อ่านชัดบนเครื่องพิมพ์ความร้อน */
+  html[data-paper="58"] main,
+  html[data-paper="80"] main {
+    color: #000 !important;
+  }
 }

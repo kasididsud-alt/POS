@@ -1,0 +1,76 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { query, one } from "@/lib/db";
+import { getAppContext } from "@/lib/auth";
+
+type Result = { ok: boolean; error?: string };
+
+async function requireOrg() {
+  const ctx = await getAppContext();
+  if (!ctx?.org) throw new Error("unauthorized");
+  if (ctx.membership?.role !== "owner")
+    throw new Error("เฉพาะเจ้าของร้านเท่านั้น");
+  return ctx;
+}
+
+export async function addDebt(formData: FormData): Promise<Result> {
+  try {
+    const ctx = await requireOrg();
+    const customerId = String(formData.get("customer_id") ?? "").trim() || null;
+    const amount = Number(formData.get("amount") ?? 0);
+    const dueDate = String(formData.get("due_date") ?? "").trim() || null;
+    const note = String(formData.get("note") ?? "").trim() || null;
+    if (amount <= 0) return { ok: false, error: "ระบุยอดหนี้มากกว่า 0" };
+
+    await query(
+      `insert into debts (org_id, customer_id, amount, due_date, note, created_by)
+       values ($1,$2,$3,$4,$5,$6)`,
+      [ctx.org!.id, customerId, amount, dueDate, note, ctx.userId],
+    );
+    revalidatePath("/receivables");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+export async function recordPayment(
+  debtId: string,
+  amount: number,
+): Promise<Result> {
+  try {
+    const ctx = await requireOrg();
+    if (amount <= 0) return { ok: false, error: "ยอดชำระต้องมากกว่า 0" };
+
+    const debt = await one<{ amount: number; paid: number }>(
+      "select amount, paid from debts where id=$1 and org_id=$2",
+      [debtId, ctx.org!.id],
+    );
+    if (!debt) return { ok: false, error: "ไม่พบรายการ" };
+
+    const newPaid = Number(debt.paid) + amount;
+    const status = newPaid >= Number(debt.amount) ? "paid" : "open";
+    await query("update debts set paid=$1, status=$2 where id=$3 and org_id=$4", [
+      newPaid,
+      status,
+      debtId,
+      ctx.org!.id,
+    ]);
+    revalidatePath("/receivables");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+export async function deleteDebt(id: string): Promise<Result> {
+  try {
+    const ctx = await requireOrg();
+    await query("delete from debts where id=$1 and org_id=$2", [id, ctx.org!.id]);
+    revalidatePath("/receivables");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}

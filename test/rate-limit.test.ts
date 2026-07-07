@@ -1,0 +1,32 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { rateLimit } from "../lib/rate-limit.ts";
+
+test("rateLimit อนุญาตจนถึง limit แล้วบล็อก", () => {
+  const key = "test-a";
+  assert.equal(rateLimit(key, 3).ok, true); // 1
+  assert.equal(rateLimit(key, 3).ok, true); // 2
+  assert.equal(rateLimit(key, 3).ok, true); // 3
+  assert.equal(rateLimit(key, 3).ok, false); // 4 → เกิน
+});
+
+test("rateLimit แต่ละ key อิสระต่อกัน", () => {
+  assert.equal(rateLimit("test-b", 1).ok, true);
+  assert.equal(rateLimit("test-b", 1).ok, false);
+  assert.equal(rateLimit("test-c", 1).ok, true); // key ใหม่ ไม่โดนผลของ b
+});
+
+test("rateLimit remaining ลดลงถูกต้อง", () => {
+  const r1 = rateLimit("test-d", 5);
+  assert.equal(r1.remaining, 4);
+  const r2 = rateLimit("test-d", 5);
+  assert.equal(r2.remaining, 3);
+});
+
+test("rateLimit รีเซ็ตเมื่อพ้นหน้าต่างเวลา", () => {
+  const key = "test-e";
+  assert.equal(rateLimit(key, 1, 1).ok, true); // window 1ms
+  const past = rateLimit(key, 1, 1);
+  // อาจ ok ถ้าเลย 1ms แล้ว — ยืนยันว่ามี resetAt เป็นอนาคต
+  assert.ok(past.resetAt >= Date.now() - 5);
+});

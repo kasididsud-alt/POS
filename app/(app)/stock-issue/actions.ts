@@ -1,0 +1,36 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { query } from "@/lib/db";
+import { getAppContext } from "@/lib/auth";
+
+type Result = { ok: boolean; error?: string };
+
+export async function issueStock(formData: FormData): Promise<Result> {
+  try {
+    const ctx = await getAppContext();
+    if (!ctx?.org) throw new Error("unauthorized");
+
+    const productId = String(formData.get("product_id") ?? "");
+    const qty = Number(formData.get("qty") ?? 0);
+    const reasonLabel = String(formData.get("reason_label") ?? "เบิกใช้");
+    const note = String(formData.get("note") ?? "").trim();
+    if (!productId || qty <= 0)
+      return { ok: false, error: "ระบุสินค้าและจำนวน (มากกว่า 0)" };
+    if (!ctx.branchId) return { ok: false, error: "ยังไม่ได้กำหนดสาขา" };
+
+    const fullNote = [reasonLabel, note].filter(Boolean).join(" — ");
+    await query(
+      `insert into stock_movements (org_id, product_id, branch_id, qty_change, reason, note, created_by)
+       values ($1,$2,$3,$4,'adjust',$5,$6)`,
+      [ctx.org.id, productId, ctx.branchId, -Math.abs(qty), fullNote, ctx.userId],
+    );
+
+    revalidatePath("/stock-issue");
+    revalidatePath("/stock");
+    revalidatePath("/products");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
