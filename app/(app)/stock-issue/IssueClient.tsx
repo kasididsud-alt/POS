@@ -28,14 +28,17 @@ export default function IssueClient({
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
 
-  function submit(fd: FormData) {
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
     setError(null);
     setOk(false);
     start(async () => {
-      const res = await issueStock(fd);
+      const res = await issueStock(new FormData(form));
       if (!res.ok) setError(res.error ?? "บันทึกไม่สำเร็จ");
       else {
         setOk(true);
+        form.reset(); // ล้างเฉพาะตอนสำเร็จ; ถ้า error ค่าที่กรอกยังอยู่
         router.refresh();
       }
     });
@@ -46,7 +49,7 @@ export default function IssueClient({
       <h1 className="text-2xl font-bold">เบิก / ตัดจ่าย</h1>
 
       <div className="card p-5">
-        <form action={submit} className="space-y-3">
+        <form onSubmit={submit} className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="label">สินค้า *</label>

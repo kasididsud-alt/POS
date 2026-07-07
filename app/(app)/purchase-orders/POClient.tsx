@@ -234,6 +234,11 @@ export default function POClient({
             <label className="label">หมายเหตุ</label>
             <input className="input" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
+          {error && (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
           <div className="flex items-center justify-between border-t border-[var(--border)] pt-3">
             <span className="font-bold">รวม {formatTHB(total)}</span>
             <button onClick={submitPO} disabled={pending} className="btn-primary">

@@ -254,7 +254,13 @@ export default function ProductsClient({
         title={editing ? "แก้ไขสินค้า" : "เพิ่มสินค้า"}
       >
         <form
-          action={(fd) => run(() => saveProduct(fd), () => setShowForm(false))}
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(
+              () => saveProduct(new FormData(e.currentTarget)),
+              () => setShowForm(false),
+            );
+          }}
           className="space-y-3"
         >
           {editing && <input type="hidden" name="id" value={editing.id} />}
@@ -315,9 +321,9 @@ export default function ProductsClient({
                 <button
                   type="button"
                   onClick={() => {
-                    const code = generateInternalEAN13(
-                      Math.floor(performance.now()) + products.length,
-                    );
+                    // สุ่มด้วย crypto กันชนกันข้าม session/แท็บ (เดิมใช้ performance.now())
+                    const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+                    const code = generateInternalEAN13(seed);
                     if (barcodeRef.current) barcodeRef.current.value = code;
                     setBarcodeView(code);
                   }}
@@ -389,6 +395,7 @@ export default function ProductsClient({
               />
             </div>
           )}
+          {error && <p className="text-sm text-red-600">{error}</p>}
           <button disabled={pending} type="submit" className="btn-primary w-full">
             {pending ? "กำลังบันทึก..." : "บันทึก"}
           </button>
@@ -402,7 +409,13 @@ export default function ProductsClient({
         title={`ปรับสต็อก: ${receiving?.name ?? ""}`}
       >
         <form
-          action={(fd) => run(() => receiveStock(fd), () => setReceiving(null))}
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(
+              () => receiveStock(new FormData(e.currentTarget)),
+              () => setReceiving(null),
+            );
+          }}
           className="space-y-3"
         >
           <input type="hidden" name="product_id" value={receiving?.id} />
@@ -428,6 +441,7 @@ export default function ProductsClient({
             <label className="label">หมายเหตุ</label>
             <input name="note" className="input" />
           </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
           <button disabled={pending} type="submit" className="btn-primary w-full">
             {pending ? "กำลังบันทึก..." : "บันทึก"}
           </button>
@@ -441,7 +455,13 @@ export default function ProductsClient({
         title={`ลดสต็อก: ${reducing?.name ?? ""}`}
       >
         <form
-          action={(fd) => run(() => reduceStock(fd), () => setReducing(null))}
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(
+              () => reduceStock(new FormData(e.currentTarget)),
+              () => setReducing(null),
+            );
+          }}
           className="space-y-3"
         >
           <input type="hidden" name="product_id" value={reducing?.id} />
@@ -470,6 +490,7 @@ export default function ProductsClient({
               placeholder="เช่น ของเสีย, สูญหาย, แตกหัก"
             />
           </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
           <button disabled={pending} type="submit" className="btn-primary w-full">
             {pending ? "กำลังบันทึก..." : "ลดสต็อก"}
           </button>
@@ -479,7 +500,13 @@ export default function ProductsClient({
       {/* Category */}
       <Modal open={showCat} onClose={() => setShowCat(false)} title="เพิ่มหมวดหมู่">
         <form
-          action={(fd) => run(() => createCategory(fd), () => setShowCat(false))}
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(
+              () => createCategory(new FormData(e.currentTarget)),
+              () => setShowCat(false),
+            );
+          }}
           className="space-y-3"
         >
           <div>
@@ -491,6 +518,7 @@ export default function ProductsClient({
               มีอยู่แล้ว: {categories.map((c) => c.name).join(", ")}
             </p>
           )}
+          {error && <p className="text-sm text-red-600">{error}</p>}
           <button disabled={pending} type="submit" className="btn-primary w-full">
             เพิ่มหมวด
           </button>

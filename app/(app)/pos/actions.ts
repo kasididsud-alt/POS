@@ -60,6 +60,7 @@ export async function checkoutAction(
       ],
     );
 
+    revalidatePath("/pos");
     revalidatePath("/products");
     revalidatePath("/dashboard");
     revalidatePath("/sales");

@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Modal from "@/components/Modal";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import { formatTHB } from "@/lib/format";
 import type { CartLine, ProductWithStock } from "@/lib/types";
 import { checkoutAction, getPromptPayQRAction } from "./actions";
+
+// ปัดเงินให้เหลือ 2 ตำแหน่ง (สตางค์) กัน float ทศนิยมเพี้ยนตอนส่งให้ server
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 type CartItem = CartLine & { max: number; unit: string };
 export type PosCustomer = { id: string; name: string; phone: string | null; points: number };
@@ -22,15 +26,22 @@ export default function PosClient({
   hasPromptPay,
   customers,
   promotions,
+  orgId,
+  branchId,
 }: {
   products: ProductWithStock[];
   hasPromptPay: boolean;
   customers: PosCustomer[];
   promotions: PosPromotion[];
+  orgId: string;
+  branchId: string | null;
 }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  // ค่าที่กำลังพิมพ์ในช่องจำนวน (draft) — ยอมค่าว่างชั่วคราวโดยไม่ลบรายการ
+  const [qtyDrafts, setQtyDrafts] = useState<Record<string, string>>({});
   const [manualDiscount, setManualDiscount] = useState(0);
   const [customerId, setCustomerId] = useState("");
   const [payMode, setPayMode] = useState<null | "cash" | "promptpay" | "credit">(null);
@@ -55,19 +66,21 @@ export default function PosClient({
     customerId: string;
     discount: number;
   };
+  // แยก key ตามร้าน/สาขา กันบิลพักรั่วข้ามบัญชีบนเครื่องเดียวกัน
+  const heldKey = `stockpos_held:${orgId}:${branchId ?? "none"}`;
   const [held, setHeld] = useState<HeldCart[]>([]);
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("stockpos_held");
-      if (raw) setHeld(JSON.parse(raw));
+      const raw = localStorage.getItem(heldKey);
+      setHeld(raw ? JSON.parse(raw) : []);
     } catch {
-      /* ignore */
+      setHeld([]);
     }
-  }, []);
+  }, [heldKey]);
   function persistHeld(next: HeldCart[]) {
     setHeld(next);
     try {
-      localStorage.setItem("stockpos_held", JSON.stringify(next));
+      localStorage.setItem(heldKey, JSON.stringify(next));
     } catch {
       /* ignore */
     }
@@ -81,10 +94,32 @@ export default function PosClient({
     resetSale();
   }
   function resumeHeld(h: HeldCart) {
-    setCart(h.items);
-    setCustomerId(h.customerId);
+    // อ้างอิงราคา/สต็อกล่าสุดจากสินค้าปัจจุบัน และตัดรายการที่ไม่มีในคลังแล้ว
+    const resolved: CartItem[] = [];
+    const dropped: string[] = [];
+    for (const it of h.items) {
+      const p = products.find((x) => x.id === it.product_id);
+      if (!p) {
+        dropped.push(it.name);
+        continue;
+      }
+      resolved.push({
+        ...it,
+        name: p.name,
+        unit_price: p.price,
+        max: p.qty,
+        unit: p.unit,
+        qty: Math.min(it.qty, p.qty),
+      });
+    }
+    setCart(resolved);
+    setCustomerId(customers.some((c) => c.id === h.customerId) ? h.customerId : "");
     setManualDiscount(h.discount);
     persistHeld(held.filter((x) => x.id !== h.id));
+    if (dropped.length) {
+      setScanMsg(`อัปเดตราคา/สต็อกล่าสุดแล้ว · ตัดรายการที่ไม่มีในคลัง: ${dropped.join(", ")}`);
+      setTimeout(() => setScanMsg(null), 3500);
+    }
   }
 
   const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
@@ -100,7 +135,7 @@ export default function PosClient({
     );
   }, [products, search]);
 
-  const subtotal = cart.reduce((s, i) => s + i.unit_price * i.qty, 0);
+  const subtotal = round2(cart.reduce((s, i) => s + i.unit_price * i.qty, 0));
 
   // โปรโมชั่นที่ดีที่สุดที่เข้าเงื่อนไข (ยอดถึงขั้นต่ำ)
   const bestPromo = useMemo(() => {
@@ -111,16 +146,18 @@ export default function PosClient({
         p.type === "percent"
           ? (subtotal * Number(p.value)) / 100
           : Number(p.value);
-      const capped = Math.min(amount, subtotal);
+      const capped = round2(Math.min(amount, subtotal));
       if (!best || capped > best.amount) best = { promo: p, amount: capped };
     }
     return best;
   }, [promotions, subtotal]);
 
   // ใช้ส่วนลดที่กรอกเอง ถ้าไม่กรอกใช้โปรโมชั่นอัตโนมัติ
-  const appliedDiscount = manualDiscount > 0 ? manualDiscount : (bestPromo?.amount ?? 0);
-  const total = Math.max(subtotal - appliedDiscount, 0);
-  const change = Number(cashReceived || 0) - total;
+  const appliedDiscount = round2(
+    manualDiscount > 0 ? manualDiscount : (bestPromo?.amount ?? 0),
+  );
+  const total = round2(Math.max(subtotal - appliedDiscount, 0));
+  const change = round2(Number(cashReceived || 0) - total);
 
   function addToCart(p: ProductWithStock) {
     setCart((prev) => {
@@ -159,6 +196,26 @@ export default function PosClient({
         ),
       );
     }
+  }
+
+  // แก้จำนวนผ่านการพิมพ์: ยอมค่าว่างชั่วคราว ไม่ลบรายการจนกว่าจะยืนยัน (blur)
+  function onQtyInput(id: string, raw: string) {
+    setQtyDrafts((d) => ({ ...d, [id]: raw }));
+    const n = parseInt(raw, 10);
+    if (raw.trim() !== "" && Number.isFinite(n) && n > 0) {
+      setCart((prev) =>
+        prev.map((i) =>
+          i.product_id === id ? { ...i, qty: Math.min(n, i.max) } : i,
+        ),
+      );
+    }
+  }
+  function commitQty(id: string) {
+    setQtyDrafts((d) => {
+      const next = { ...d };
+      delete next[id];
+      return next;
+    });
   }
 
   function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -222,6 +279,7 @@ export default function PosClient({
 
   function resetSale() {
     setCart([]);
+    setQtyDrafts({});
     setManualDiscount(0);
     setCustomerId("");
     setCashReceived("");
@@ -235,35 +293,48 @@ export default function PosClient({
     setError(null);
     setQr(null);
     setPayMode("promptpay");
-    const res = await getPromptPayQRAction(total);
-    if (!res.ok) setError(res.error ?? "สร้าง QR ไม่สำเร็จ");
-    else setQr(res.dataUrl ?? null);
+    try {
+      const res = await getPromptPayQRAction(total);
+      if (!res.ok) setError(res.error ?? "สร้าง QR ไม่สำเร็จ");
+      else setQr(res.dataUrl ?? null);
+    } catch {
+      setError("เครือข่ายขัดข้อง — สร้าง QR ไม่สำเร็จ ลองใหม่อีกครั้ง");
+    }
   }
 
   function confirmCheckout(method: "cash" | "promptpay" | "credit") {
     setError(null);
     start(async () => {
-      const res = await checkoutAction({
-        // ส่งแค่ product_id + qty — ราคาคิดฝั่ง server จาก DB
-        items: cart.map(({ product_id, qty }) => ({ product_id, qty })),
-        payment_method: method,
-        discount: appliedDiscount,
-        cash_received: method === "cash" ? Number(cashReceived || 0) : null,
-        customer_id: customerId || null,
-      });
-      if (!res.ok) {
-        setError(res.error ?? "ขายไม่สำเร็จ");
-        return;
+      try {
+        const res = await checkoutAction({
+          // ส่งแค่ product_id + qty — ราคาคิดฝั่ง server จาก DB
+          items: cart.map(({ product_id, qty }) => ({ product_id, qty })),
+          payment_method: method,
+          discount: round2(appliedDiscount),
+          cash_received: method === "cash" ? round2(Number(cashReceived || 0)) : null,
+          customer_id: customerId || null,
+        });
+        if (!res.ok) {
+          setError(res.error ?? "ขายไม่สำเร็จ");
+          return;
+        }
+        setReceipt({
+          bill_no: res.bill_no!,
+          total: res.total!,
+          change: res.change ?? 0,
+          method:
+            method === "cash" ? "เงินสด" : method === "promptpay" ? "พร้อมเพย์" : "ขายเชื่อ",
+          points: res.points ?? 0,
+        });
+        resetSale();
+        // ดึงสต็อก/แต้มล่าสุดมาแสดงในกริด กัน qty ค้างทั้งกะ (กัน oversell)
+        router.refresh();
+      } catch {
+        // เน็ตสะดุด/เซิร์ฟเวอร์ไม่ตอบ — ยังไม่ล้างตะกร้า ให้ลองใหม่ได้
+        setError(
+          "เครือข่ายขัดข้อง — ยังไม่บันทึกการขาย ตรวจสอบแล้วลองใหม่อีกครั้ง (ตะกร้ายังอยู่)",
+        );
       }
-      setReceipt({
-        bill_no: res.bill_no!,
-        total: res.total!,
-        change: res.change ?? 0,
-        method:
-          method === "cash" ? "เงินสด" : method === "promptpay" ? "พร้อมเพย์" : "ขายเชื่อ",
-        points: res.points ?? 0,
-      });
-      resetSale();
     });
   }
 
@@ -397,15 +468,29 @@ export default function PosClient({
                 <div className="text-xs text-[var(--muted)]">{formatTHB(i.unit_price)}</div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => setQty(i.product_id, i.qty - 1)} className="btn-outline h-7 w-7 p-0">
+                <button
+                  onClick={() => {
+                    commitQty(i.product_id);
+                    setQty(i.product_id, i.qty - 1);
+                  }}
+                  className="btn-outline h-7 w-7 p-0"
+                >
                   −
                 </button>
                 <input
                   className="w-10 rounded border border-[var(--border)] text-center text-sm"
-                  value={i.qty}
-                  onChange={(e) => setQty(i.product_id, parseInt(e.target.value) || 0)}
+                  inputMode="numeric"
+                  value={qtyDrafts[i.product_id] ?? String(i.qty)}
+                  onChange={(e) => onQtyInput(i.product_id, e.target.value)}
+                  onBlur={() => commitQty(i.product_id)}
                 />
-                <button onClick={() => setQty(i.product_id, i.qty + 1)} className="btn-outline h-7 w-7 p-0">
+                <button
+                  onClick={() => {
+                    commitQty(i.product_id);
+                    setQty(i.product_id, i.qty + 1);
+                  }}
+                  className="btn-outline h-7 w-7 p-0"
+                >
                   +
                 </button>
               </div>
@@ -508,7 +593,9 @@ export default function PosClient({
             {[total, 100, 500, 1000].map((amt, idx) => (
               <button
                 key={idx}
-                onClick={() => setCashReceived(String(amt))}
+                onClick={() =>
+                  setCashReceived(idx === 0 ? total.toFixed(2) : String(amt))
+                }
                 className="btn-outline px-3 py-1 text-sm"
               >
                 {idx === 0 ? "พอดี" : `฿${amt}`}

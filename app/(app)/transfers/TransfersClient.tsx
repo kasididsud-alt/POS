@@ -147,7 +147,15 @@ export default function TransfersClient({
                           รับเข้า
                         </button>
                         <button
-                          onClick={() => run(() => setTransferStatus(t.id, "cancelled"))}
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `ยกเลิก ${t.transfer_no}? สต็อกจะถูกคืนกลับสาขาต้นทาง`,
+                              )
+                            )
+                              run(() => setTransferStatus(t.id, "cancelled"));
+                          }}
+                          disabled={pending}
                           className="btn-ghost px-2 py-1 text-xs text-red-600"
                         >
                           ยกเลิก
@@ -245,6 +253,11 @@ export default function TransfersClient({
             <label className="label">หมายเหตุ</label>
             <input className="input" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
+          {error && (
+            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
           <button onClick={submit} disabled={pending} className="btn-primary w-full">
             {pending ? "กำลังบันทึก..." : "สร้างใบโอน"}
           </button>

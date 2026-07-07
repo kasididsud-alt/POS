@@ -31,6 +31,8 @@ export default async function PosPage() {
       hasPromptPay={!!ctx.org.promptpay_id}
       customers={customers}
       promotions={promotions}
+      orgId={orgId}
+      branchId={ctx.branchId}
     />
   );
 }

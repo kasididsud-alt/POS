@@ -51,7 +51,10 @@ export default function SettingsClient({
       <div className="card p-6">
         <h2 className="font-semibold">ข้อมูลร้าน</h2>
         <form
-          action={(fd) => run(() => updateOrg(fd))}
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(() => updateOrg(new FormData(e.currentTarget)));
+          }}
           className="mt-4 space-y-3"
         >
           <div>
@@ -178,7 +181,21 @@ export default function SettingsClient({
         </div>
         {isOwner && (
           <form
-            action={(fd) => run(() => inviteMember(fd))}
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              setMsg(null);
+              start(async () => {
+                const res = await inviteMember(new FormData(form));
+                if (!res.ok)
+                  setMsg({ ok: false, text: res.error ?? "ผิดพลาด" });
+                else {
+                  setMsg({ ok: true, text: res.message ?? "สำเร็จ" });
+                  form.reset(); // ล้างเฉพาะตอนเชิญสำเร็จ กันเชิญซ้ำ
+                  router.refresh();
+                }
+              });
+            }}
             className="mt-4 flex gap-2"
           >
             <input

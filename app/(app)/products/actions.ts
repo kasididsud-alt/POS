@@ -181,10 +181,22 @@ export async function receiveStock(formData: FormData): Promise<ActionResult> {
       return { ok: false, error: "ระบุสินค้าและจำนวน" };
     if (!branchId) return { ok: false, error: "ยังไม่ได้กำหนดสาขา" };
 
+    // "ปรับยอด" ใส่ค่าลบได้ — แต่ต้องกันไม่ให้สต็อกติดลบ (เหมือน reduceStock)
+    const delta = reason === "adjust" ? qty : Math.abs(qty);
+    if (delta < 0) {
+      const cur = await one<{ qty: number }>(
+        "select coalesce(qty,0)::int as qty from product_stock where product_id=$1 and branch_id=$2",
+        [productId, branchId],
+      );
+      const available = cur?.qty ?? 0;
+      if (Math.abs(delta) > available)
+        return { ok: false, error: `ปรับลดได้ไม่เกินคงเหลือ (${available} ชิ้น)` };
+    }
+
     await query(
       `insert into stock_movements (org_id, product_id, branch_id, qty_change, reason, note, created_by)
        values ($1,$2,$3,$4,$5,$6,$7)`,
-      [orgId, productId, branchId, reason === "adjust" ? qty : Math.abs(qty), reason, note, userId],
+      [orgId, productId, branchId, delta, reason, note, userId],
     );
 
     await logAudit(orgId, userId, "stock." + reason, `qty ${qty}`);
