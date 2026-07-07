@@ -63,12 +63,17 @@ export async function loginAction(formData: FormData) {
     );
   }
 
-  const user = await one<{ id: string; password_hash: string }>(
+  const user = await one<{ id: string; password_hash: string | null }>(
     "select id, password_hash from users where email = $1",
     [email],
   );
 
-  if (!user || !(await verifyPassword(password, user.password_hash))) {
+  // บัญชี Google ล้วน (password_hash null) ให้ตอบเหมือนรหัสผิด — กัน account enumeration
+  if (
+    !user ||
+    !user.password_hash ||
+    !(await verifyPassword(password, user.password_hash))
+  ) {
     // นับครั้งล้มเหลว + ล็อกเมื่อถึงเกณฑ์
     await query(
       `insert into login_attempts (email, fails, updated_at)
