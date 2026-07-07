@@ -1,9 +1,10 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "ข้อตกลงการใช้งาน · ขายดี Stock",
+  title: "ข้อตกลงการใช้งาน",
   description:
     "ข้อตกลงการใช้งาน ขายดี Stock — เงื่อนไขบัญชีผู้ใช้ แพ็กเกจและการชำระเงิน การทดลองใช้ฟรี การยกเลิก ความเป็นเจ้าของข้อมูลร้านค้า และข้อจำกัดความรับผิด",
+  alternates: { canonical: "/terms" },
 };
 
 const UPDATED_AT = "7 กรกฎาคม 2569 (2026-07-07)";

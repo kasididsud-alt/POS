@@ -13,6 +13,8 @@ const PUBLIC_PATHS = [
   "/signup",
   "/forgot-password",
   "/reset-password",
+  "/terms",
+  "/privacy",
   "/robots.txt",
   "/sitemap.xml",
   "/opengraph-image",
