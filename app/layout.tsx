@@ -44,11 +44,11 @@ export const metadata: Metadata = {
     "ระบบขายของหน้าร้าน",
   ],
   authors: [{ name: "ขายดี Stock" }],
-  alternates: { canonical: "/" },
+  // canonical ปล่อยให้แต่ละหน้า public ประกาศเอง (อย่า inherit "/" ไปทุกหน้า)
   openGraph: {
     type: "website",
     locale: "th_TH",
-    url: SITE_URL,
+    // ไม่ล็อก url ไว้ที่หน้าแรก — ปล่อยให้ resolve ตาม canonical/route ของแต่ละหน้า
     siteName: "ขายดี Stock",
     title: "ขายดี Stock — ระบบ POS + คลังสินค้า สำหรับร้านค้าไทย",
     description:
@@ -59,6 +59,8 @@ export const metadata: Metadata = {
     title: "ขายดี Stock — ระบบ POS + คลังสินค้า สำหรับร้านค้าไทย",
     description:
       "ขายของ ตัดสต็อก เก็บเงิน จบในระบบเดียว — เริ่มใช้ฟรี",
+    // ใช้รูป OG ที่ generate จาก app/opengraph-image.tsx เป็น twitter card image
+    images: ["/opengraph-image"],
   },
   robots: { index: true, follow: true },
   appleWebApp: {

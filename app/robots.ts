@@ -10,7 +10,12 @@ export default function robots(): MetadataRoute.Robots {
       // หน้าหลังบ้าน (ต้องล็อกอิน) ไม่ต้องให้ index
       disallow: [
         "/api/",
+        "/admin",
         "/dashboard",
+        "/billing",
+        "/returns",
+        "/labels",
+        "/vat-report",
         "/pos",
         "/products",
         "/sales",

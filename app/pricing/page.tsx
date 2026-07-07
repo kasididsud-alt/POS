@@ -1,13 +1,88 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getAppContext } from "@/lib/auth";
+import { PLANS, type PlanId } from "@/lib/plans";
 import Pricing from "@/components/landing/Pricing";
 import PricingComparison from "./PricingComparison";
 import PricingFaq from "./PricingFaq";
 
-export const metadata = {
-  title: "ราคา · ขายดี Stock",
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+export const metadata: Metadata = {
+  // title.template ใน layout จะเติม "· ขายดี Stock" ให้เอง — ห้ามใส่แบรนด์ซ้ำในนี้
+  title: "ราคาแพ็กเกจ โปรแกรม POS + ระบบจัดการสต็อก เริ่มฟรี",
   description:
-    "เทียบแพ็กเกจ ขายดี Stock แบบละเอียด — เริ่มต้น (ฟรี) / ร้านค้า ฿399 / มืออาชีพ ฿990 / องค์กร เริ่มฟรี ไม่ต้องใช้บัตรเครดิต",
+    "เทียบแพ็กเกจ ขายดี Stock แบบละเอียด — เริ่มต้น (ฟรี) / ร้านค้า ฿399 / มืออาชีพ ฿990 / องค์กร ติดต่อ ไม่ต้องใช้บัตรเครดิต",
+  alternates: { canonical: "/pricing" },
+};
+
+// FAQ สำหรับ structured data — ต้องตรงกับ PricingFaq.tsx (ยังแยก component ไม่ได้ในสโคปนี้)
+const PRICING_FAQ: { q: string; a: string }[] = [
+  {
+    q: "ทดลองใช้ฟรีได้ไหม ต้องใส่บัตรเครดิตก่อนไหม?",
+    a: "แพ็กเริ่มต้นใช้ฟรีถาวร ไม่มีค่าใช้จ่าย · ส่วนแพ็กร้านค้าและมืออาชีพ ทดลองฟรี 14 วัน โดยไม่ต้องผูกบัตรก่อน จะเริ่มเก็บเงินก็ต่อเมื่อคุณเลือกสมัครต่อเท่านั้น",
+  },
+  {
+    q: "เปลี่ยนแพ็ก หรือยกเลิกได้ไหม?",
+    a: "ได้ทุกเมื่อ ไม่มีสัญญาผูกมัด — อัปเกรด ดาวน์เกรด หรือยกเลิกเองได้ในหน้า “แพ็กเกจ” ถ้ายกเลิกจะใช้งานได้จนจบรอบที่จ่ายไปแล้ว",
+  },
+  {
+    q: "จ่ายเงินอย่างไร? มีส่วนลดรายปีไหม?",
+    a: "ชำระผ่านบัตรเครดิต/เดบิตด้วยระบบ Stripe ที่ปลอดภัยตามมาตรฐานสากล · เลือกจ่ายรายปีจะประหยัดประมาณ 2 เดือนเมื่อเทียบกับรายเดือน",
+  },
+  {
+    q: "ถ้าจำนวนสินค้าเกินลิมิตของแพ็กจะเป็นอย่างไร?",
+    a: "ข้อมูลเดิมทั้งหมดยังอยู่ครบ ไม่หายไปไหน · ระบบจะแจ้งให้อัปเกรดเมื่อคุณจะเพิ่มสินค้าเกินโควตา พออัปเกรดแล้วเพิ่มต่อได้ทันที",
+  },
+  {
+    q: "ข้อมูลของร้านปลอดภัยไหม เอาข้อมูลออกได้ไหม?",
+    a: "ข้อมูลเป็นของร้านคุณ 100% · สำรองข้อมูลอัตโนมัติ และส่งออกเป็นไฟล์ Excel/CSV ได้ (แพ็กมืออาชีพขึ้นไป) ไม่ล็อกข้อมูลคุณไว้กับเรา",
+  },
+  {
+    q: "มีค่าติดตั้ง หรือต้องซื้อเครื่องเฉพาะไหม?",
+    a: "ไม่มีค่าติดตั้ง และไม่ต้องซื้อเครื่องเฉพาะ · ใช้งานผ่านมือถือ แท็บเล็ต หรือคอมพิวเตอร์ที่มีอยู่แล้วได้เลย รองรับเครื่องพิมพ์ใบเสร็จ/เครื่องสแกนบาร์โค้ดทั่วไป",
+  },
+  {
+    q: "แพ็กองค์กร (เชน/บริษัท) ราคาเท่าไร?",
+    a: "คิดราคาตามขนาดการใช้งาน (จำนวนสาขา/ผู้ใช้) รวมฟีเจอร์พิเศษ เช่น API เชื่อมระบบ สร้าง Role เอง ผู้ดูแลเฉพาะ และ SLA · ติดต่อทีมงานเพื่อรับใบเสนอราคาที่พอดีกับองค์กรคุณ",
+  },
+  {
+    q: "รองรับหลายสาขาไหม?",
+    a: "รองรับ — ตั้งแต่แพ็กมืออาชีพขึ้นไป จัดการหลายสาขาในบัญชีเดียว โอนย้ายสต็อกระหว่างสาขา และดูรายงานรวมทุกสาขาได้",
+  },
+];
+
+// derive ราคา Offer จาก lib/plans.ts เพื่อไม่ให้ schema เพี้ยนจากราคาจริง
+const OFFER_TIERS: PlanId[] = ["free", "pro", "premium"];
+
+const PRICING_JSON_LD = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      name: "ขายดี Stock",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      url: `${SITE_URL}/pricing`,
+      description:
+        "โปรแกรมขายหน้าร้าน (POS) + ระบบจัดการสต็อกสำหรับร้านค้าไทย ตัดสต็อกอัตโนมัติ รับเงินสด/พร้อมเพย์ รายงานกำไร หลายสาขา",
+      offers: OFFER_TIERS.map((id) => ({
+        "@type": "Offer",
+        name: PLANS[id].name,
+        price: String(PLANS[id].monthly),
+        priceCurrency: "THB",
+        url: `${SITE_URL}/pricing`,
+      })),
+    },
+    {
+      "@type": "FAQPage",
+      mainEntity: PRICING_FAQ.map(({ q, a }) => ({
+        "@type": "Question",
+        name: q,
+        acceptedAnswer: { "@type": "Answer", text: a },
+      })),
+    },
+  ],
 };
 
 export default async function PublicPricingPage() {
@@ -16,6 +91,10 @@ export default async function PublicPricingPage() {
 
   return (
     <div className="lp flex min-h-screen flex-col">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(PRICING_JSON_LD) }}
+      />
       <div className="lp-bg" aria-hidden="true" />
 
       {/* Nav */}

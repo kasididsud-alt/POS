@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getAppContext } from "@/lib/auth";
+import { PLANS } from "@/lib/plans";
 import Pricing from "@/components/landing/Pricing";
+
+export const metadata: Metadata = {
+  // หน้าแรกคือ canonical ของตัวเอง (ไม่ให้หน้าอื่น inherit ค่านี้)
+  alternates: { canonical: "/" },
+};
 
 const RECEIPT_LINES = [
   "ขายหน้าร้าน (POS)",
@@ -69,8 +76,9 @@ const JSON_LD = {
       offers: {
         "@type": "AggregateOffer",
         priceCurrency: "THB",
-        lowPrice: "0",
-        highPrice: "790",
+        // derive จาก lib/plans.ts เพื่อไม่ให้ราคาใน schema เพี้ยนจากที่แสดงจริง
+        lowPrice: String(PLANS.free.monthly),
+        highPrice: String(PLANS.premium.monthly),
         offerCount: "3",
       },
     },

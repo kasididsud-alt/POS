@@ -1,7 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { loginAction } from "../actions";
 import { GoogleButton } from "@/components/google-button";
 import { googleConfigured } from "@/lib/oauth";
+
+export const metadata: Metadata = {
+  title: "เข้าสู่ระบบ",
+  description:
+    "เข้าสู่ระบบ ขายดี Stock — โปรแกรมขายหน้าร้าน (POS) + ระบบจัดการสต็อกสำหรับร้านค้าไทย จัดการร้านได้ทุกที่บนมือถือ",
+  alternates: { canonical: "/login" },
+};
 
 export default async function LoginPage({
   searchParams,

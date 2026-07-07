@@ -1,7 +1,15 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { SignupForm } from "./signup-form";
 import { GoogleButton } from "@/components/google-button";
 import { googleConfigured } from "@/lib/oauth";
+
+export const metadata: Metadata = {
+  title: "สมัครใช้งานฟรี",
+  description:
+    "เปิดร้านกับ ขายดี Stock ฟรี — โปรแกรม POS + ระบบจัดการสต็อก ตัดสต็อกอัตโนมัติ รับพร้อมเพย์ ทดลองฟีเจอร์เต็ม 14 วัน ไม่ต้องใช้บัตรเครดิต",
+  alternates: { canonical: "/signup" },
+};
 
 export default async function SignupPage({
   searchParams,
