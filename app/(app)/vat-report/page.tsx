@@ -2,7 +2,6 @@ import Link from "next/link";
 import { requireOwnerPage } from "@/lib/guard";
 import { query } from "@/lib/db";
 import { formatTHB } from "@/lib/format";
-import { vatInclusive } from "@/lib/vat";
 import PrintButton from "@/components/PrintButton";
 
 /** YYYY-MM ปัจจุบัน */
@@ -44,20 +43,57 @@ export default async function VatReportPage({
   const sp = await searchParams;
   const month = /^\d{4}-\d{2}$/.test(sp.m ?? "") ? sp.m! : currentMonth();
   const [y, mo] = month.split("-").map(Number);
-  const start = new Date(y, mo - 1, 1).toISOString();
-  const end = new Date(y, mo, 1).toISOString();
+  // ขอบเขตงวดเป็นเวลาผนัง (wall-clock) โซนไทย ให้ตรงกับการ group รายวัน
+  // ที่ใช้ (created_at at time zone 'Asia/Bangkok') ด้านล่าง — กันบิลใกล้เที่ยงคืนตกเดือน/วันผิด
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const start = `${y}-${pad2(mo)}-01 00:00:00`;
+  const nextY = mo === 12 ? y + 1 : y;
+  const nextMo = mo === 12 ? 1 : mo + 1;
+  const end = `${nextY}-${pad2(nextMo)}-01 00:00:00`;
 
-  const rows = await query<{ d: string; bills: string; total: number }>(
-    `select to_char(created_at::date,'YYYY-MM-DD') d, count(*) bills, sum(total) total
-       from sales
-      where org_id=$1 and created_at>=$2 and created_at<$3
-      group by 1 order by 1`,
-    [orgId, start, end],
+  // คำนวณ VAT ต่อใบ (แล้วค่อยรวม) เพื่อให้ตรงกับที่พิมพ์บนใบเสร็จจริง (vatInclusive per bill)
+  // และหักยอดคืนสินค้า (sale_returns) ในงวดเดียวกันออก → ภาษีขายสุทธิ (ตาม ภ.พ.30)
+  // ทั้งขอบเขตงวดและการ group ใช้โซนเวลา 'Asia/Bangkok' ตัวเดียวกันทั้งหมด
+  const rows = await query<{
+    d: string;
+    bills: number;
+    vat: string;
+    total: string;
+  }>(
+    `with s as (
+       select (created_at at time zone 'Asia/Bangkok')::date d,
+              count(*)::int bills,
+              sum(round(total - total * 100.0 / (100.0 + $4::numeric), 2)) vat,
+              sum(total) total
+         from sales
+        where org_id = $1
+          and (created_at at time zone 'Asia/Bangkok') >= $2::timestamp
+          and (created_at at time zone 'Asia/Bangkok') <  $3::timestamp
+        group by 1
+     ),
+     r as (
+       select (created_at at time zone 'Asia/Bangkok')::date d,
+              sum(round(total_refund - total_refund * 100.0 / (100.0 + $4::numeric), 2)) vat,
+              sum(total_refund) total
+         from sale_returns
+        where org_id = $1
+          and (created_at at time zone 'Asia/Bangkok') >= $2::timestamp
+          and (created_at at time zone 'Asia/Bangkok') <  $3::timestamp
+        group by 1
+     )
+     select to_char(coalesce(s.d, r.d), 'YYYY-MM-DD') d,
+            coalesce(s.bills, 0) bills,
+            coalesce(s.vat, 0) - coalesce(r.vat, 0) vat,
+            coalesce(s.total, 0) - coalesce(r.total, 0) total
+       from s full outer join r on s.d = r.d
+      order by 1`,
+    [orgId, start, end, rate],
   );
 
   const monthTotal = rows.reduce((a, r) => a + Number(r.total), 0);
+  const monthVat = rows.reduce((a, r) => a + Number(r.vat), 0);
   const monthBills = rows.reduce((a, r) => a + Number(r.bills), 0);
-  const v = vatInclusive(monthTotal, rate);
+  const monthBase = monthTotal - monthVat;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -118,9 +154,9 @@ export default async function VatReportPage({
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
-          <Stat label="ยอดขายรวม (รวม VAT)" value={formatTHB(v.total)} hint={`${monthBills} ใบ`} />
-          <Stat label="มูลค่าฐานภาษี (ก่อน VAT)" value={formatTHB(v.base)} />
-          <Stat label={`ภาษีขาย (VAT ${rate}%)`} value={formatTHB(v.vat)} highlight />
+          <Stat label="ยอดขายสุทธิ (รวม VAT, หักคืน)" value={formatTHB(monthTotal)} hint={`${monthBills} ใบ`} />
+          <Stat label="มูลค่าฐานภาษี (ก่อน VAT)" value={formatTHB(monthBase)} />
+          <Stat label={`ภาษีขาย (VAT ${rate}%)`} value={formatTHB(monthVat)} highlight />
         </div>
 
         {/* รายวัน */}
@@ -143,27 +179,29 @@ export default async function VatReportPage({
               </thead>
               <tbody>
                 {rows.map((r) => {
-                  const dv = vatInclusive(Number(r.total), rate);
+                  const total = Number(r.total);
+                  const vat = Number(r.vat);
+                  const base = total - vat;
                   return (
                     <tr key={r.d} className="border-b border-[var(--border)] last:border-0">
                       <td className="py-1.5">
                         {r.d.slice(8, 10)}/{r.d.slice(5, 7)}/{Number(r.d.slice(0, 4)) + 543}
                       </td>
                       <td className="py-1.5 text-right">{r.bills}</td>
-                      <td className="py-1.5 text-right">{formatTHB(dv.base)}</td>
-                      <td className="py-1.5 text-right">{formatTHB(dv.vat)}</td>
-                      <td className="py-1.5 text-right">{formatTHB(dv.total)}</td>
+                      <td className="py-1.5 text-right">{formatTHB(base)}</td>
+                      <td className="py-1.5 text-right">{formatTHB(vat)}</td>
+                      <td className="py-1.5 text-right">{formatTHB(total)}</td>
                     </tr>
                   );
                 })}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-[var(--border)] font-bold">
-                  <td className="py-2">รวมทั้งเดือน</td>
+                  <td className="py-2">รวมทั้งเดือน (สุทธิ)</td>
                   <td className="py-2 text-right">{monthBills}</td>
-                  <td className="py-2 text-right">{formatTHB(v.base)}</td>
-                  <td className="py-2 text-right">{formatTHB(v.vat)}</td>
-                  <td className="py-2 text-right">{formatTHB(v.total)}</td>
+                  <td className="py-2 text-right">{formatTHB(monthBase)}</td>
+                  <td className="py-2 text-right">{formatTHB(monthVat)}</td>
+                  <td className="py-2 text-right">{formatTHB(monthTotal)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -171,7 +209,8 @@ export default async function VatReportPage({
         </div>
 
         <p className="mt-4 text-[10px] text-[var(--muted)]">
-          * คำนวณแบบราคารวมภาษี (VAT {rate}%) — ภาษีขาย = ยอดรวม × {rate}/(100+{rate}).
+          * คำนวณแบบราคารวมภาษี (VAT {rate}%) รวมภาษีต่อใบเสร็จให้ตรงกับเอกสารจริง
+          และหักยอดคืนสินค้าในงวดออกแล้ว (ยอดสุทธิ) — วันที่/งวดอิงเวลาไทย (Asia/Bangkok).
           ตรวจสอบกับเอกสารจริงก่อนยื่นแบบ ภ.พ.30 ทุกครั้ง
         </p>
       </div>
