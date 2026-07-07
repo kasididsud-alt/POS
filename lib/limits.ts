@@ -1,5 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
-import { query } from "@/lib/db";
+import { query, one } from "@/lib/db";
+import { hashPassword } from "@/lib/password";
 import { planForOrg, PLANS } from "@/lib/plans";
 import { planAllowsPath, minPlanForPath } from "@/components/nav";
 import type { OrgContext } from "@/lib/guard";
@@ -43,4 +45,85 @@ export async function productLimitError(
     return `ถึงลิมิตแพ็ก “${PLANS[plan].name}” (${max.toLocaleString("th-TH")} รายการ) แล้ว — อัปเกรดแพ็กเพื่อเพิ่มสินค้าได้อีก`;
   }
   return null;
+}
+
+/**
+ * เช็คก่อนเพิ่มผู้ใช้เข้าร้าน — คืนข้อความ error ถ้าจำนวนสมาชิกถึงลิมิตแพ็ก (else null)
+ * Free 1 / Pro 5 / Premium ไม่จำกัด
+ */
+export async function userLimitError(
+  orgId: string,
+  sub: Subscription | null,
+): Promise<string | null> {
+  const plan = planForOrg(sub);
+  const max = PLANS[plan].limits.users;
+  if (!Number.isFinite(max)) return null;
+
+  const rows = await query<{ n: number }>(
+    "select count(*)::int as n from memberships where org_id = $1",
+    [orgId],
+  );
+  const n = Number(rows[0]?.n ?? 0);
+  if (n >= max) {
+    return `แพ็ก “${PLANS[plan].name}” ใช้ได้ ${max.toLocaleString("th-TH")} ผู้ใช้ (ตอนนี้มี ${n}) — อัปเกรดแพ็กเพื่อเพิ่มพนักงาน`;
+  }
+  return null;
+}
+
+export type InviteResult = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+};
+
+/**
+ * เพิ่มผู้ใช้เข้าร้าน (ฟังก์ชันกลาง — ใช้ทั้งหน้า staff และ settings)
+ * บังคับ user limit ตามแพ็ก, หา user เดิมหรือสร้างใหม่พร้อมรหัสผ่านชั่วคราว,
+ * กันเพิ่มซ้ำ, สังกัดสาขาหลักไว้ก่อน
+ */
+export async function inviteUserToOrg(
+  ctx: OrgContext,
+  emailRaw: string,
+  role: "owner" | "cashier",
+): Promise<InviteResult> {
+  const email = emailRaw.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return { ok: false, error: "อีเมลไม่ถูกต้อง" };
+
+  const limitMsg = await userLimitError(ctx.org.id, ctx.subscription);
+  if (limitMsg) return { ok: false, error: limitMsg };
+
+  let user = await one<{ id: string }>("select id from users where email=$1", [
+    email,
+  ]);
+  let tempPassword: string | null = null;
+  if (!user) {
+    tempPassword = randomBytes(6).toString("base64url");
+    const hash = await hashPassword(tempPassword);
+    user = await one<{ id: string }>(
+      "insert into users (email, password_hash) values ($1,$2) returning id",
+      [email, hash],
+    );
+  }
+
+  const exists = await one(
+    "select id from memberships where org_id=$1 and user_id=$2",
+    [ctx.org.id, user!.id],
+  );
+  if (exists) return { ok: false, error: "พนักงานคนนี้อยู่ในร้านแล้ว" };
+
+  // สังกัดสาขาหลักไว้ก่อน (เจ้าของเปลี่ยนได้ทีหลัง)
+  const defaultBranch =
+    ctx.branches.find((b) => b.is_default) ?? ctx.branches[0] ?? null;
+  await query(
+    "insert into memberships (org_id, user_id, role, branch_id) values ($1,$2,$3,$4)",
+    [ctx.org.id, user!.id, role, defaultBranch?.id ?? null],
+  );
+
+  return {
+    ok: true,
+    message: tempPassword
+      ? `เพิ่ม ${email} แล้ว — รหัสผ่านชั่วคราว: ${tempPassword} (ให้พนักงานเปลี่ยนภายหลัง)`
+      : `เพิ่ม ${email} เข้าร้านแล้ว`,
+  };
 }

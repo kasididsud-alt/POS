@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { query, one } from "@/lib/db";
-import { hashPassword } from "@/lib/password";
+import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { inviteUserToOrg } from "@/lib/limits";
+import type { OrgContext } from "@/lib/guard";
 
 type Result = { ok: boolean; error?: string; message?: string };
 
@@ -46,45 +47,13 @@ export async function updateOrg(formData: FormData): Promise<Result> {
 export async function inviteMember(formData: FormData): Promise<Result> {
   try {
     const ctx = await requireOwner();
-    const email = String(formData.get("email") ?? "")
-      .trim()
-      .toLowerCase();
-    if (!email) return { ok: false, error: "กรุณากรอกอีเมล" };
-
-    // หา user เดิม หรือสร้างใหม่พร้อมรหัสผ่านชั่วคราว
-    let user = await one<{ id: string }>(
-      "select id from users where email = $1",
-      [email],
+    const result = await inviteUserToOrg(
+      ctx as OrgContext,
+      String(formData.get("email") ?? ""),
+      "cashier",
     );
-    let tempPassword: string | null = null;
-    if (!user) {
-      tempPassword = Math.random().toString(36).slice(-8);
-      const hash = await hashPassword(tempPassword);
-      user = await one<{ id: string }>(
-        "insert into users (email, password_hash) values ($1, $2) returning id",
-        [email, hash],
-      );
-    }
-
-    // กันเพิ่มซ้ำ
-    const exists = await one(
-      "select id from memberships where org_id = $1 and user_id = $2",
-      [ctx.org!.id, user!.id],
-    );
-    if (exists) return { ok: false, error: "พนักงานคนนี้อยู่ในร้านแล้ว" };
-
-    await query(
-      "insert into memberships (org_id, user_id, role) values ($1, $2, 'cashier')",
-      [ctx.org!.id, user!.id],
-    );
-
-    revalidatePath("/settings");
-    return {
-      ok: true,
-      message: tempPassword
-        ? `เพิ่ม ${email} แล้ว — รหัสผ่านชั่วคราว: ${tempPassword} (ให้พนักงานเปลี่ยนภายหลัง)`
-        : `เพิ่ม ${email} เข้าร้านแล้ว`,
-    };
+    if (result.ok) revalidatePath("/settings");
+    return result;
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
