@@ -23,7 +23,7 @@ export default async function ReceivablesPage() {
       `select d.id, d.amount, d.paid, d.due_date, d.note, d.status, d.created_at,
               c.name as customer_name
          from debts d
-         left join customers c on c.id = d.customer_id
+         left join customers c on c.id = d.customer_id and c.org_id = d.org_id
         where d.org_id = $1
         order by (d.status='open') desc, d.created_at desc
         limit 100`,

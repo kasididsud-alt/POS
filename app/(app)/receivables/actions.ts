@@ -23,6 +23,15 @@ export async function addDebt(formData: FormData): Promise<Result> {
     const note = String(formData.get("note") ?? "").trim() || null;
     if (amount <= 0) return { ok: false, error: "ระบุยอดหนี้มากกว่า 0" };
 
+    // ผูกหนี้กับลูกค้าได้เฉพาะลูกค้าของร้านตัวเองเท่านั้น — กันยัด customer_id ข้ามร้าน
+    if (customerId) {
+      const owned = await one<{ id: string }>(
+        "select id from customers where id=$1 and org_id=$2",
+        [customerId, ctx.org!.id],
+      );
+      if (!owned) return { ok: false, error: "ไม่พบลูกค้าในร้านนี้" };
+    }
+
     await query(
       `insert into debts (org_id, customer_id, amount, due_date, note, created_by)
        values ($1,$2,$3,$4,$5,$6)`,

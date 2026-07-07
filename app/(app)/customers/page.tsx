@@ -13,7 +13,7 @@ export default async function CustomersPage() {
             count(s.id)::int as bills,
             coalesce(sum(s.total), 0) as total_spent
        from customers c
-       left join sales s on s.customer_id = c.id
+       left join sales s on s.customer_id = c.id and s.org_id = c.org_id
       where c.org_id = $1
       group by c.id
       order by c.created_at desc`,

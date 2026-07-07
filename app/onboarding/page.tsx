@@ -7,6 +7,8 @@ async function createOrgAction(formData: FormData) {
   "use server";
   const ctx = await getAppContext();
   if (!ctx) redirect("/login");
+  // idempotent: มีร้านอยู่แล้ว (double-submit / back-button / POST ตรง) → ไม่สร้างซ้ำ
+  if (ctx.org) redirect("/dashboard");
 
   const name = String(formData.get("shop_name") ?? "").trim();
   const promptpay = String(formData.get("promptpay") ?? "").trim() || null;

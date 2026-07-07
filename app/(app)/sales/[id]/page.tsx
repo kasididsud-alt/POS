@@ -7,6 +7,14 @@ import { vatInclusive } from "@/lib/vat";
 import ThermalPrintButton from "@/components/ThermalPrintButton";
 import type { Sale, SaleItem, Customer } from "@/lib/types";
 
+// ข้อความวิธีชำระเงินบนใบเสร็จ/ใบกำกับ — ต้องครบทุกวิธี ไม่ใช่ cash/พร้อมเพย์ แบบ 2 ทาง
+const PAY_LABEL: Record<string, string> = {
+  cash: "เงินสด",
+  promptpay: "พร้อมเพย์",
+  credit: "ค้างชำระ (ขายเชื่อ)",
+};
+const payLabel = (m: string) => PAY_LABEL[m] ?? m;
+
 export default async function SaleDetailPage({
   params,
   searchParams,
@@ -30,10 +38,13 @@ export default async function SaleDetailPage({
     [id],
   );
 
+  // org_id filter สำคัญ: กันใบเสร็จโชว์ PII ลูกค้าของร้านอื่น หาก customer_id
+  // ถูกยัดข้ามร้านมา (ดู checkout_sale validation ฝั่ง SQL)
   const customer = s.customer_id
-    ? await one<Customer>("select * from customers where id = $1", [
-        s.customer_id,
-      ])
+    ? await one<Customer>(
+        "select * from customers where id = $1 and org_id = $2",
+        [s.customer_id, ctx.org.id],
+      )
     : null;
 
   const vatOn = ctx.org.vat_registered;
@@ -193,7 +204,7 @@ export default async function SaleDetailPage({
           </div>
 
           <div className="mt-3 text-xs text-[var(--muted)]">
-            ชำระโดย {s.payment_method === "cash" ? "เงินสด" : "พร้อมเพย์"}
+            ชำระโดย {payLabel(s.payment_method)}
           </div>
 
           {/* ลายเซ็น */}
@@ -302,10 +313,7 @@ export default async function SaleDetailPage({
               </div>
             )}
 
-            <Row
-              label="ชำระโดย"
-              value={s.payment_method === "cash" ? "เงินสด" : "พร้อมเพย์"}
-            />
+            <Row label="ชำระโดย" value={payLabel(s.payment_method)} />
             {s.payment_method === "cash" && (
               <>
                 <Row

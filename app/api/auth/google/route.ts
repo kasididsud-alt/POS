@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { buildAuthUrl, googleConfigured, newState } from "@/lib/oauth";
+import { safeInternalPath } from "@/lib/safe-redirect";
 
 // GET /api/auth/google?next=/dashboard
 // เริ่ม flow: ตั้ง state cookie กัน CSRF แล้วเด้งไปหน้ายินยอมของ Google
@@ -11,7 +12,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(url);
   }
 
-  const next = new URL(request.url).searchParams.get("next") ?? "/dashboard";
+  // sanitize `next` กัน open redirect (รวม protocol-relative "//evil.com" ที่
+  // ผ่าน startsWith("/")) ก่อนเก็บลง cookie g_next ที่ callback ใช้ redirect
+  const next = safeInternalPath(new URL(request.url).searchParams.get("next"));
   const state = newState();
 
   const c = await cookies();
@@ -23,8 +26,8 @@ export async function GET(request: Request) {
     secure: process.env.COOKIE_SECURE === "true",
   };
   c.set("g_state", state, cookieOpts);
-  // เก็บปลายทางหลังล็อกอินไว้ (อย่าให้ผู้ใช้ใส่ค่าภายนอกได้)
-  c.set("g_next", next.startsWith("/") ? next : "/dashboard", cookieOpts);
+  // เก็บปลายทางหลังล็อกอินไว้ (sanitize แล้ว — เป็น path ภายในเสมอ)
+  c.set("g_next", next, cookieOpts);
 
   return NextResponse.redirect(buildAuthUrl(state));
 }

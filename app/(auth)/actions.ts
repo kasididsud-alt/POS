@@ -15,6 +15,7 @@ import { createSession, destroySession } from "@/lib/session";
 import { logAudit } from "@/lib/audit";
 import { newResetToken, hashToken } from "@/lib/reset-token";
 import { sendPasswordResetEmail } from "@/lib/mailer";
+import { safeInternalPath } from "@/lib/safe-redirect";
 
 const MAX_FAILS = 5;
 const LOCK_MINUTES = 15;
@@ -47,7 +48,8 @@ export async function loginAction(formData: FormData) {
     .trim()
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? "/dashboard");
+  // sanitize `next` กัน open redirect — อนุญาตเฉพาะ path ภายใน
+  const next = safeInternalPath(formData.get("next"));
 
   // เช็คว่าโดนล็อกจากการพยายามล็อกอินผิดรัวไหม
   const attempt = await one<{ fails: number; locked_until: string | null }>(
@@ -183,10 +185,9 @@ export async function requestPasswordResetAction(formData: FormData) {
     google_sub: string | null;
   }>("select id, password_hash, google_sub from users where email = $1", [email]);
 
-  // เคสบัญชี Google ล้วน (ไม่มีรหัสผ่านให้รีเซ็ต) → แจ้งบนหน้าจอให้ไปใช้ Google
-  if (user && !user.password_hash && user.google_sub) {
-    redirect("/forgot-password?google=1");
-  }
+  // หมายเหตุ: ห้ามแยก response ตามชนิดบัญชี (Google-only / มีรหัสผ่าน / ไม่มีบัญชี)
+  // ไม่งั้นกลายเป็น account enumeration — บัญชี Google ล้วนตกไปที่ ?sent=1 เหมือนกันหมด
+  // (ไม่มีรหัสผ่านให้รีเซ็ต จึงไม่ส่งเมลรีเซ็ต ตามเงื่อนไข user.password_hash ด้านล่าง)
 
   // rate-limit ต่ออีเมล (sliding window 15 นาที)
   const rl = await one<{ count: number }>(
