@@ -1,7 +1,25 @@
 # แนวทางการพัฒนา ขายดี Stock
 
-> อัปเดตล่าสุด: 2026-07-07 — จากผลสำรวจโปรเจ็คทั้งระบบ
+> อัปเดตล่าสุด: 2026-07-07 — หลังรอบ hardening ใหญ่ (audit ทั้งระบบ + แก้ P1/P2)
 > หลักการ: ปิดความเสี่ยงเรื่องเงินก่อน → เก็บรายได้ให้ครบ → ปรับประสิทธิภาพ → ค่อยเพิ่มฟีเจอร์ใหม่
+
+## ✅ รอบ hardening 2026-07-07 (เสร็จแล้ว)
+
+สำรวจทั้งระบบด้วยทีม AI 8 มิติ + adversarial verify → พบ 0 P0, 21 P1, 28 P2 (หลังกรอง) แก้แล้วเกือบทั้งหมด · `npm test` 77/77 เขียว · production build ผ่าน · migration ถึงเลข 27
+
+- Phase 0 เสร็จ: commit ทั้งโปรเจ็ค (เดิม untracked), `.gitignore` + `.env.example` ตรงจริง, ลบ `@supabase/*`, archive migration เก่า
+- Phase 1 เสร็จ: login 500 Google-only, /terms + /privacy (PDPA) + proxy allow-list, harden checkout_sale/process_return (ราคาจาก DB, migration 23)
+- Phase 2 เสร็จ: user limit ตามแพ็ก (`lib/limits.ts` รวม invite), unique `(org_id, bill_no)`+retry (mig 25), validate org ใน stock RPC/actions, cash_shifts branch_id (mig 24), README/docs
+- บัคจาก audit ที่แก้เพิ่ม: PII ลูกค้ารั่วข้าม org บนใบเสร็จ, Stripe portal owner check, webhook idempotency/ordering (mig 27), comp_plan เป็น floor, plan gating ใน server action, transfer/PO double-exec, คืนบิลเครดิตลดหนี้ (mig 26), POS stale stock/exact-cash float/error boundary, held-bills namespace, VAT report หักคืน/rounding/timezone, open redirect, API flood limit
+- SEO: canonical ต่อหน้า, robots block /admin+app routes, JSON-LD (SoftwareApplication/Offer/FAQPage), OG ภาษาไทย, sitemap /pricing+terms+privacy
+
+### ค้างไว้เป็น backlog (จาก audit — ยังไม่วิกฤต)
+- P2-6: product/user limit เป็น check-then-insert (race เกินโควตาได้เล็กน้อยตอน concurrent) — แก้ด้วย advisory lock หรือ insert...where count<max
+- P1-4 ส่วนที่เหลือ: plan gating one-liner (`assertPlanAllows`) ยังไม่ใส่ใน transfers/purchase-orders/promotions/suppliers/receivables/stock-count/locations/lots
+- `po_no`/`so_no` ยังใช้ count(*)+1 (race แบบเดียวกับ bill_no ที่แก้แล้ว)
+- P2-24: landing/pricing ถูกบังคับ dynamic เพราะ getAppContext อ่าน cookie — แยก `<AuthNavCta>` เป็น client component เพื่อ cache ได้
+- debt ผูกกับ sale ผ่าน note string — ควรเพิ่ม `debts.sale_id`
+- rate limit/held-bills เป็น in-memory ต่อ instance — ย้าย Redis เมื่อ scale
 
 ## กติกาการทำงาน (ใช้ทุกเฟส)
 
