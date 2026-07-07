@@ -1,4 +1,4 @@
-// Domain types (sync กับ supabase/migrations/0001_init.sql)
+// Domain types (sync กับ db/schema.sql + db/modules/)
 
 export type Role = "owner" | "cashier";
 export type PaymentMethod = "cash" | "promptpay" | "credit";

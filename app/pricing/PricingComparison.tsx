@@ -45,7 +45,7 @@ const SECTIONS: Section[] = [
     rows: [
       { label: "หลายสาขา + โอนย้ายสต็อก", vals: [false, false, true, true] },
       { label: "ตรวจนับ + ตำแหน่งจัดเก็บ", vals: [false, false, true, true] },
-      { label: "ล็อต / วันหมดอายุ (FEFO)", vals: [false, false, true, true] },
+      { label: "ล็อตสินค้า + วันหมดอายุ", vals: [false, false, true, true] },
       { label: "ใบสั่งซื้อ (PO) + ซัพพลายเออร์", vals: [false, false, true, true] },
       { label: "ขายเชื่อ / ลูกหนี้ + วางบิล", vals: [false, false, true, true] },
       { label: "รายงาน VAT + Export (Excel/CSV)", vals: [false, false, true, true] },
