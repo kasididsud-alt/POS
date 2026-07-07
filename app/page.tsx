@@ -493,8 +493,8 @@ export default async function LandingPage() {
             <div className="lp-mono text-xs font-bold text-[var(--ink)]">บริษัท</div>
             <ul className="mt-3 space-y-2 text-sm text-[var(--muted2)]">
               <li><span className="cursor-default">เกี่ยวกับเรา</span></li>
-              <li><span className="cursor-default">นโยบายความเป็นส่วนตัว (PDPA)</span></li>
-              <li><span className="cursor-default">ข้อตกลงการใช้งาน</span></li>
+              <li><Link href="/privacy" className="hover:text-[var(--ink)]">นโยบายความเป็นส่วนตัว (PDPA)</Link></li>
+              <li><Link href="/terms" className="hover:text-[var(--ink)]">ข้อตกลงการใช้งาน</Link></li>
             </ul>
           </div>
           <div>
