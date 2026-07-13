@@ -302,6 +302,11 @@ test("index assembles the approved sections without fake proof", async () => {
 
   let cursor = -1;
   for (const marker of ordered) {
+    assert.equal(
+      page.split(marker).length - 1,
+      1,
+      marker + " must appear exactly once",
+    );
     const next = page.indexOf(marker);
     assert.ok(next > cursor, marker + " must appear in approved order");
     cursor = next;
@@ -323,6 +328,10 @@ test("index assembles the approved sections without fake proof", async () => {
 
   assert.match(page, /alternates:\s*\{ canonical: "\/" \}/);
   assert.match(page, /type="application\/ld\+json"/);
+  assert.match(
+    page,
+    /JSON\.stringify\(JSON_LD\)\.replace\(\s*\/<\s*\/g,\s*"\\\\u003c"\s*\)/,
+  );
   assert.match(page, /"@type": "SoftwareApplication"/);
   assert.match(page, /"@type": "FAQPage"/);
   assert.match(page, /lowPrice: String\(PLANS\.free\.monthly\)/);
@@ -343,4 +352,26 @@ test("index assembles the approved sections without fake proof", async () => {
   const footer = page.indexOf("<LandingFooter");
   assert.ok(mainStart !== -1 && mainEnd > mainStart, "page must render main");
   assert.ok(footer > mainEnd, "LandingFooter must render outside main");
+});
+
+test("composed landing components preserve approved routes and anchors", async () => {
+  const [hero, sections, productShowcase, pricing] = await Promise.all([
+    read("components/landing/Hero.tsx"),
+    read("components/landing/LandingSections.tsx"),
+    read("components/landing/ProductShowcase.tsx"),
+    read("components/landing/Pricing.tsx"),
+  ]);
+  const authAwarePrimaryRoute =
+    /const primaryHref\s*=\s*isAuthed\s*\?\s*"\/dashboard"\s*:\s*"\/signup"\s*;/;
+
+  assert.match(hero, authAwarePrimaryRoute);
+  assert.match(sections, authAwarePrimaryRoute);
+  assert.match(hero, /href\s*=\s*["']\/login["']/);
+  assert.match(hero, /href\s*=\s*["']\/pricing["']/);
+  assert.match(pricing, /href\s*=\s*["']\/signup["']/);
+
+  assert.match(hero, /href\s*=\s*["']#product["']/);
+  assert.match(hero, /href\s*=\s*["']#features["']/);
+  assert.match(productShowcase, /id\s*=\s*["']product["']/);
+  assert.match(sections, /id\s*=\s*["']features["']/);
 });
