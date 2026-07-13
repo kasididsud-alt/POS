@@ -2,6 +2,7 @@
 export default function LogoMark({ className = "h-9 w-9" }: { className?: string }) {
   return (
     <span
+      aria-hidden="true"
       className={`relative grid shrink-0 place-items-center rounded-xl border border-white/15 bg-[var(--lp-night,#06152b)] ${className}`}
     >
       <span className="lp-display text-lg font-bold leading-none text-white">ข</span>

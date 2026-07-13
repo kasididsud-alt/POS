@@ -56,6 +56,33 @@ test("Ticker loops, pauses, and supports reduced motion", async () => {
   assert.match(css, /prefers-reduced-motion: reduce/);
 });
 
+test("Ticker groups fill the viewport with a balanced loop seam", async () => {
+  const css = await read("app/globals.css");
+  const groupRule = css.match(
+    /\.lp-home \.lp-ticker-group\s*\{([^}]*)\}/,
+  )?.[1];
+
+  assert.ok(groupRule, "ticker group CSS rule must exist");
+  assert.match(
+    groupRule,
+    /\bmin-width:\s*100vw\b/,
+    "each repeated group must cover at least one viewport",
+  );
+  assert.match(
+    groupRule,
+    /\bjustify-content:\s*space-around\b/,
+    "free space must be shared so the loop seam matches internal spacing",
+  );
+});
+
+test("LogoMark is hidden from assistive technology", async () => {
+  const logo = await read("components/landing/LogoMark.tsx");
+  const outerMark = logo.match(/return \(\s*(<span\b[\s\S]*?>)/)?.[1];
+
+  assert.ok(outerMark, "LogoMark must render an outer span");
+  assert.match(outerMark, /\baria-hidden="true"/);
+});
+
 test("Hero stat cards stay clear of the tablet photo subject", async () => {
   const [hero, css] = await Promise.all([
     read("components/landing/Hero.tsx"),

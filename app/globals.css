@@ -754,7 +754,9 @@ body {
 .lp-home .lp-ticker-group {
   display: flex;
   flex: none;
+  min-width: 100vw;
   align-items: center;
+  justify-content: space-around;
   padding-block: 13px;
 }
 
