@@ -109,3 +109,12 @@ test("Homepage overrides shared card motion with safe transitions", async () => 
     }
   }
 });
+
+test("Product Showcase represents a real retail checkout", async () => {
+  const source = await read("components/landing/ProductShowcase.tsx");
+  assert.match(source, /id="product"/);
+  assert.match(source, /ตะกร้าสินค้า/);
+  assert.match(source, /พร้อมเพย์/);
+  assert.match(source, /เก็บเงิน ฿175/);
+  assert.doesNotMatch(source, /ร้านอาหาร|คาเฟ่/);
+});
