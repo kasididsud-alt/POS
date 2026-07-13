@@ -284,3 +284,63 @@ test("public pricing is projected from canonical plan definitions", async () => 
   assert.match(pricing, /tiers: readonly PublicPlanDef\[\]/);
   assert.match(pricingPage, /<Pricing tiers=\{PUBLIC_PLANS\}/);
 });
+
+test("index assembles the approved sections without fake proof", async () => {
+  const page = await read("app/page.tsx");
+  const ordered = [
+    "<Hero",
+    "<Outcomes",
+    "<ProductShowcase",
+    "<RetailWorkflow",
+    "<FeatureGrid",
+    "<StoreFit",
+    "<Pricing",
+    "<LandingFaq",
+    "<ClosingCta",
+    "<LandingFooter",
+  ];
+
+  let cursor = -1;
+  for (const marker of ordered) {
+    const next = page.indexOf(marker);
+    assert.ok(next > cursor, marker + " must appear in approved order");
+    cursor = next;
+  }
+
+  assert.match(page, /export default async function LandingPage\(\)/);
+  assert.doesNotMatch(page, /["']use client["']/);
+  assert.match(page, /<div className="lp lp-home">/);
+  assert.equal(
+    [...page.matchAll(/getAppContext\(\)/g)].length,
+    1,
+    "getAppContext must be awaited exactly once",
+  );
+  assert.match(page, /const ctx = await getAppContext\(\);/);
+  assert.match(page, /const isAuthed = Boolean\(ctx\);/);
+  assert.match(page, /<Hero isAuthed=\{isAuthed\} \/>/);
+  assert.match(page, /<ClosingCta isAuthed=\{isAuthed\} \/>/);
+  assert.match(page, /<Pricing tiers=\{PUBLIC_PLANS\} \/>/);
+
+  assert.match(page, /alternates:\s*\{ canonical: "\/" \}/);
+  assert.match(page, /type="application\/ld\+json"/);
+  assert.match(page, /"@type": "SoftwareApplication"/);
+  assert.match(page, /"@type": "FAQPage"/);
+  assert.match(page, /lowPrice: String\(PLANS\.free\.monthly\)/);
+  assert.match(page, /highPrice: String\(PLANS\.premium\.monthly\)/);
+  assert.match(page, /offerCount: String\(PUBLIC_PLANS\.length\)/);
+  assert.match(page, /FAQ_ITEMS\.map\(\(item\) => \(\{/);
+  assert.match(page, /name: item\.question/);
+  assert.match(page, /text: item\.answer/);
+
+  assert.doesNotMatch(
+    page,
+    /STATS|TESTIMONIALS|500\+|2\.4M|4\.8\/5|99\.9%|ร้านจริงใช้จริง|ความพึงพอใจ|ร้านอาหาร|คาเฟ่/i,
+  );
+  assert.match(page, /name: "ขายดี Stock"/);
+
+  const mainStart = page.indexOf("<main>");
+  const mainEnd = page.indexOf("</main>");
+  const footer = page.indexOf("<LandingFooter");
+  assert.ok(mainStart !== -1 && mainEnd > mainStart, "page must render main");
+  assert.ok(footer > mainEnd, "LandingFooter must render outside main");
+});
