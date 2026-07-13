@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { query, one } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { planForOrg, PLANS } from "@/lib/plans";
-import { planAllowsPath, minPlanForPath } from "@/components/nav";
+import { planAllowsPath, minPlanForPath, isOwnerOnlyPath } from "@/components/nav";
 import type { OrgContext } from "@/lib/guard";
 import type { Subscription } from "@/lib/types";
 
@@ -22,6 +22,17 @@ export function assertPlanForPath(sub: Subscription | null, path: string): void 
 /** ใช้ในหน้า/action ที่มี ctx อยู่แล้ว */
 export function requirePlanForPath(ctx: OrgContext, path: string): void {
   assertPlanForPath(ctx.subscription, path);
+}
+
+/**
+ * guard หน้าเฉพาะเจ้าของร้าน — พนักงานเข้า path ใน OWNER_ONLY_PATHS ไม่ได้ → เด้ง /dashboard
+ * (เมนูซ่อนอยู่แล้วใน navGroupsForRole แต่การซ่อนเมนูกันแค่ตอน render — พิมพ์ URL ตรงยังเข้าได้
+ * จึงต้องบังคับที่ layout เหมือน assertPlanForPath)
+ */
+export function assertRoleForPath(role: string, path: string): void {
+  if (role !== "owner" && isOwnerOnlyPath(path)) {
+    redirect("/dashboard");
+  }
 }
 
 /**

@@ -20,6 +20,8 @@
 - P2-24: landing/pricing ถูกบังคับ dynamic เพราะ getAppContext อ่าน cookie — แยก `<AuthNavCta>` เป็น client component เพื่อ cache ได้
 - debt ผูกกับ sale ผ่าน note string — ควรเพิ่ม `debts.sale_id`
 - rate limit/held-bills เป็น in-memory ต่อ instance — ย้าย Redis เมื่อ scale
+- (จากรอบเช็ค role 2026-07-13) นโยบายสิทธิ์ cashier ในโมดูลปฏิบัติงาน: ตอนนี้พนักงานแก้ราคา/ลบสินค้า/applyCount ได้เท่าเจ้าของ — ต้องตัดสินใจว่าจะจำกัดอะไร (ขั้นต่ำที่แนะนำ: ห้ามลบสินค้า/แก้ราคา)
+- (จากรอบเช็ค role 2026-07-13) pricing โฆษณา "สิทธิ์ละเอียด + audit log" (Premium) และ "สร้าง Role เอง" (Enterprise) แต่ระบบมีแค่ owner/cashier — ถอดข้อความหรือสร้าง role เพิ่ม (แบบเดียวกับเคส FEFO)
 
 ## กติกาการทำงาน (ใช้ทุกเฟส)
 

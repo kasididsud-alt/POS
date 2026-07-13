@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { getAppContext, isSubscriptionActive } from "@/lib/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { planForOrg } from "@/lib/plans";
-import { assertPlanForPath } from "@/lib/limits";
+import { assertPlanForPath, assertRoleForPath } from "@/lib/limits";
 import { countStockAlerts } from "@/lib/queries";
 import { signOutAction } from "@/app/(auth)/actions";
 import Sidebar from "@/components/Sidebar";
@@ -25,9 +25,10 @@ export default async function AppLayout({
   const role = ctx.membership?.role ?? "cashier";
   const plan = planForOrg(ctx.subscription);
 
-  // เช็คสิทธิ์ตามแพ็กจุดเดียว — แพ็กต่ำกว่าเข้า path นี้ไม่ได้ → เด้ง /pricing
+  // เช็คสิทธิ์ตามแพ็ก + role จุดเดียว — แพ็กต่ำกว่าเด้ง /billing, พนักงานเข้าหน้า owner-only เด้ง /dashboard
   const pathname = (await headers()).get("x-pathname") ?? "";
   assertPlanForPath(ctx.subscription, pathname);
+  assertRoleForPath(role, pathname);
 
   const alertCount = await countStockAlerts(ctx.org.id, ctx.branchId);
 

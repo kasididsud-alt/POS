@@ -23,6 +23,14 @@ export const OWNER_ONLY_PATHS = new Set([
   "/integrations",
 ]);
 
+/** path นี้เฉพาะเจ้าของร้านไหม (รองรับ sub-path เช่น /reports/daily) */
+export function isOwnerOnlyPath(path: string): boolean {
+  for (const p of OWNER_ONLY_PATHS) {
+    if (path === p || path.startsWith(p + "/")) return true;
+  }
+  return false;
+}
+
 /** กรองเมนูตาม role */
 export function navGroupsForRole(role: string): NavGroup[] {
   if (role === "owner") return NAV_GROUPS;
