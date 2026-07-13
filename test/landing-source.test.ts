@@ -118,3 +118,45 @@ test("Product Showcase represents a real retail checkout", async () => {
   assert.match(source, /เก็บเงิน ฿175/);
   assert.doesNotMatch(source, /ร้านอาหาร|คาเฟ่/);
 });
+
+test("Product Showcase keeps the ขายดี Stock brand", async () => {
+  const source = await read("components/landing/ProductShowcase.tsx");
+  assert.match(source, />ขายดี Stock</);
+  assert.doesNotMatch(source, />ขายดี POS</);
+});
+
+test("Product Showcase keeps benefit descriptions readable on mobile", async () => {
+  const source = await read("components/landing/ProductShowcase.tsx");
+  const benefitDescription = source.match(
+    /<span className="([^"]*)">\s*\{benefit\.description\}\s*<\/span>/,
+  );
+  assert.ok(benefitDescription, "benefit description classes must be auditable");
+  assert.match(benefitDescription[1], /(?:^|\s)text-base(?:\s|$)/);
+  assert.doesNotMatch(benefitDescription[1], /(?:^|\s)text-(?:xs|sm)(?:\s|$)/);
+});
+
+test("Product Showcase uses high-contrast labels", async () => {
+  const source = await read("components/landing/ProductShowcase.tsx");
+  const paperLabels = [...source.matchAll(/className="([^"]*)"/g)]
+    .map((match) => match[1])
+    .filter((classes) => classes.includes("bg-[var(--paper-2)]"));
+  assert.ok(paperLabels.length > 0, "paper labels must remain auditable");
+  for (const classes of paperLabels) {
+    assert.doesNotMatch(classes, /text-\[var\(--green\)\]/);
+    assert.match(classes, /text-\[var\(--green-d\)\]/);
+  }
+
+  const checkoutLabel = source.match(
+    /className="([^"]*)"[^>]*>\s*เก็บเงิน ฿175\s*</,
+  );
+  assert.ok(checkoutLabel, "checkout label classes must be auditable");
+  assert.doesNotMatch(checkoutLabel[1], /opacity/);
+});
+
+test("Product Showcase demo controls are static semantic content", async () => {
+  const source = await read("components/landing/ProductShowcase.tsx");
+  assert.doesNotMatch(source, /<button\b/);
+  assert.doesNotMatch(source, /\bdisabled\b|cursor-not-allowed/);
+  assert.match(source, /<ul[^>]*aria-label="สินค้าขายดี"/);
+  assert.match(source, /<ul[^>]*aria-label="วิธีชำระเงิน"/);
+});

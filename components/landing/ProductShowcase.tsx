@@ -91,7 +91,7 @@ export default function ProductShowcase() {
                   <strong className="block text-base font-bold text-[var(--lp-ink)]">
                     {benefit.title}
                   </strong>
-                  <span className="mt-1 block text-sm leading-6 text-[var(--lp-muted)]">
+                  <span className="mt-1 block text-base leading-7 text-[var(--lp-muted)]">
                     {benefit.description}
                   </span>
                 </span>
@@ -111,7 +111,7 @@ export default function ProductShowcase() {
                 <span className="h-2.5 w-2.5 rounded-full bg-white/25" />
                 <span className="h-2.5 w-2.5 rounded-full bg-[var(--lp-mint)]" />
               </span>
-              <span className="truncate text-sm font-bold">ขายดี POS</span>
+              <span className="truncate text-sm font-bold">ขายดี Stock</span>
             </div>
             <span className="lp-mono rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[11px] text-white/75">
               สาขาหลัก · บิล #088
@@ -135,14 +135,14 @@ export default function ProductShowcase() {
                 </span>
               </div>
 
-              <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-2 xl:grid-cols-3">
+              <ul
+                className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-2 xl:grid-cols-3"
+                aria-label="สินค้าขายดี"
+              >
                 {PRODUCTS.map((product) => (
-                  <button
+                  <li
                     key={product.name}
-                    type="button"
-                    disabled
-                    className="min-h-32 cursor-not-allowed rounded-2xl border border-[var(--lp-rule)] bg-white p-3 text-left disabled:opacity-100"
-                    aria-label={`${product.name} ราคา ${product.price} ตัวอย่างสินค้า`}
+                    className="min-h-32 rounded-2xl border border-[var(--lp-rule)] bg-white p-3 text-left"
                   >
                     <span
                       className={`lp-mono grid h-12 w-full place-items-center rounded-xl text-xs font-black tracking-[0.08em] ${product.markClass}`}
@@ -156,9 +156,9 @@ export default function ProductShowcase() {
                     <span className="lp-mono mt-1 block text-sm font-bold text-[var(--green)]">
                       {product.price}
                     </span>
-                  </button>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
 
             <aside className="bg-white p-4 sm:p-5" aria-labelledby="demo-cart-title">
@@ -166,7 +166,7 @@ export default function ProductShowcase() {
                 <h3 id="demo-cart-title" className="text-sm font-bold text-[var(--lp-ink)]">
                   ตะกร้าสินค้า
                 </h3>
-                <span className="lp-mono rounded-full bg-[var(--paper-2)] px-2.5 py-1 text-[11px] font-bold text-[var(--green)]">
+                <span className="lp-mono rounded-full bg-[var(--paper-2)] px-2.5 py-1 text-[11px] font-bold text-[var(--green-d)]">
                   5 ชิ้น
                 </span>
               </div>
@@ -204,35 +204,26 @@ export default function ProductShowcase() {
                 </div>
               </dl>
 
-              <fieldset className="mt-4">
-                <legend className="text-[11px] font-semibold text-[var(--lp-muted)]">
+              <div className="mt-4">
+                <p className="text-[11px] font-semibold text-[var(--lp-muted)]">
                   วิธีชำระเงิน
-                </legend>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled
-                    className="min-h-11 cursor-not-allowed rounded-xl border border-[var(--lp-rule)] bg-white px-3 text-xs font-bold text-[var(--lp-ink)] disabled:opacity-100"
-                  >
+                </p>
+                <ul
+                  className="mt-2 grid grid-cols-2 gap-2"
+                  aria-label="วิธีชำระเงิน"
+                >
+                  <li className="grid min-h-11 place-items-center rounded-xl border border-[var(--lp-rule)] bg-white px-3 text-xs font-bold text-[var(--lp-ink)]">
                     เงินสด
-                  </button>
-                  <button
-                    type="button"
-                    disabled
-                    className="min-h-11 cursor-not-allowed rounded-xl border border-[var(--green)] bg-[var(--paper-2)] px-3 text-xs font-bold text-[var(--green)] disabled:opacity-100"
-                  >
+                  </li>
+                  <li className="grid min-h-11 place-items-center rounded-xl border border-[var(--green-d)] bg-[var(--paper-2)] px-3 text-xs font-bold text-[var(--green-d)]">
                     พร้อมเพย์
-                  </button>
-                </div>
-              </fieldset>
+                  </li>
+                </ul>
+              </div>
 
-              <button
-                type="button"
-                disabled
-                className="mt-3 min-h-12 w-full cursor-not-allowed rounded-xl bg-[var(--green)] px-4 text-sm font-black text-white shadow-[0_14px_28px_-18px_rgba(8,127,96,0.8)] disabled:opacity-90"
-              >
+              <p className="mt-3 grid min-h-12 w-full place-items-center rounded-xl bg-[var(--green)] px-4 text-sm font-black text-white shadow-[0_14px_28px_-18px_rgba(8,127,96,0.8)]">
                 เก็บเงิน ฿175
-              </button>
+              </p>
             </aside>
 
             <div className="absolute bottom-4 left-4 flex items-center gap-3 rounded-2xl border border-[var(--lp-rule)] bg-white px-3.5 py-3 shadow-[0_18px_42px_-24px_rgba(7,24,47,0.48)] sm:left-5">
