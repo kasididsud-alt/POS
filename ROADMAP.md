@@ -20,8 +20,8 @@
 - P2-24: landing/pricing ถูกบังคับ dynamic เพราะ getAppContext อ่าน cookie — แยก `<AuthNavCta>` เป็น client component เพื่อ cache ได้
 - debt ผูกกับ sale ผ่าน note string — ควรเพิ่ม `debts.sale_id`
 - rate limit/held-bills เป็น in-memory ต่อ instance — ย้าย Redis เมื่อ scale
-- (จากรอบเช็ค role 2026-07-13) นโยบายสิทธิ์ cashier ในโมดูลปฏิบัติงาน: ตอนนี้พนักงานแก้ราคา/ลบสินค้า/applyCount ได้เท่าเจ้าของ — ต้องตัดสินใจว่าจะจำกัดอะไร (ขั้นต่ำที่แนะนำ: ห้ามลบสินค้า/แก้ราคา)
-- (จากรอบเช็ค role 2026-07-13) pricing โฆษณา "สิทธิ์ละเอียด + audit log" (Premium) และ "สร้าง Role เอง" (Enterprise) แต่ระบบมีแค่ owner/cashier — ถอดข้อความหรือสร้าง role เพิ่ม (แบบเดียวกับเคส FEFO)
+- ~~นโยบายสิทธิ์ cashier~~ — ✅ เสร็จ 2026-07-13: เพิ่ม role "ผู้จัดการ" (migration 29) เป็น 3 ระดับ cashier < manager < owner; MIN_ROLE_FOR_PATH ใน nav.ts (จัดซื้อ/ซัพพลายเออร์/โปรโมชั่น = manager+, เงิน/กำไร/ภาษี/ทีมงาน/ตั้งค่า = owner) + assertRoleAtLeast ราย action (แก้ราคา/ลบ/ปรับยอด/แต้ม/ตัดจ่าย/ใบโอน/ออเดอร์ = manager+) + test/role-gating.test.ts
+- (จากรอบเช็ค role 2026-07-13) pricing โฆษณา "สิทธิ์ละเอียด + audit log" (Premium) และ "สร้าง Role เอง" (Enterprise) — ตอนนี้มี 3 role แล้วจึงพอเรียก "แยกสิทธิ์" ได้ แต่ "สร้าง Role เอง" (custom RBAC) ยังไม่มีจริง + audit log ยังมี event น้อย — ถอดข้อความหรือสร้างจริง (แบบเดียวกับเคส FEFO)
 
 ## กติกาการทำงาน (ใช้ทุกเฟส)
 

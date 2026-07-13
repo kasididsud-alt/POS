@@ -52,17 +52,22 @@ body {
 }
 
 /* ============================================================
-   Landing page — อัตลักษณ์ "ใบเสร็จ + กระดาษบัญชี" (scope เฉพาะ .lp)
+   Landing page — อัตลักษณ์ "ป้ายร้านไทยยุคใหม่" (scope เฉพาะ .lp)
+   เขียวป้ายร้านเข้ม + ทองป้ายไฟ LED · หัวข้อ Prompt · ตัวเลข Chakra Petch
    ============================================================ */
 .lp {
-  --paper: #fbf9f4;
-  --paper-2: #f3efe4;
-  --ink: #18221c;
-  --green: #0e7a43;
-  --green-d: #0a5c32;
-  --rule: #ddd6c4;
-  --stamp: #e0492b;
-  --muted2: #6f7a6f;
+  --paper: #f7faf7; /* พื้นหลังขาวอมเขียวจาง */
+  --paper-2: #edf4ed; /* พื้นสลับ section */
+  --ink: #10231a; /* ตัวหนังสือหลัก เขียวเกือบดำ */
+  --night: #0b2b1d; /* เขียวป้ายร้านเข้ม (hero/footer) */
+  --night-2: #123c29; /* เขียวเข้มอ่อนกว่า สำหรับไล่เฉด */
+  --green: #0a7a41; /* ปุ่มหลัก/ลิงก์ (ขาวบนสีนี้อ่าน AA ได้) */
+  --green-d: #085f33;
+  --gold: #ffc53d; /* ทองป้ายไฟ LED */
+  --gold-d: #8a6100; /* ทองเข้ม สำหรับตัวหนังสือบนพื้นสว่าง */
+  --rule: #dbe6db; /* เส้นแบ่งบาง */
+  --stamp: var(--gold-d);
+  --muted2: #55675b;
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-noto-thai), sans-serif;
@@ -70,125 +75,110 @@ body {
   isolation: isolate;
 }
 
-/* พื้นหลัง: กริดจุดนวล + แสงเขียวจางหลัง hero (จางลงเมื่อเลื่อนลง) */
+/* พื้นหลังหน้า public สว่าง: แสงเขียวนวลด้านบน */
 .lp-bg {
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(58% 44% at 50% 0%, rgba(14, 122, 67, 0.13), transparent 70%),
-    radial-gradient(rgba(20, 32, 26, 0.1) 1.3px, transparent 1.3px);
-  background-size:
-    100% 100%,
-    24px 24px;
-  background-repeat: no-repeat, repeat;
-  -webkit-mask-image: radial-gradient(135% 100% at 50% -5%, #000 52%, transparent 100%);
-  mask-image: radial-gradient(135% 100% at 50% -5%, #000 52%, transparent 100%);
+  background: radial-gradient(60% 40% at 50% 0%, rgba(10, 122, 65, 0.09), transparent 70%);
 }
+
 .lp-display {
-  font-family: var(--font-display), sans-serif;
+  font-family: var(--font-display), var(--font-noto-thai), sans-serif;
   letter-spacing: -0.01em;
 }
 .lp-mono {
-  font-family: var(--font-mono), monospace;
+  font-family: var(--font-mono), var(--font-noto-thai), sans-serif;
 }
 
-/* กระดาษกราฟบัญชีจางๆ */
-.lp-ledger {
-  background-image:
-    linear-gradient(var(--rule) 1px, transparent 1px),
-    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
-  background-size: 30px 30px;
-  background-position: -1px -1px;
-  opacity: 0.5;
+/* eyebrow หัว section: ขีดทอง + ตัวหนังสือเขียว ระยะห่างกว้าง */
+.lp-eyebrow {
+  font-family: var(--font-mono), sans-serif;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: var(--green);
+}
+.lp-eyebrow::before {
+  content: "";
+  width: 22px;
+  height: 3px;
+  background: var(--gold);
 }
 
-/* แถวรายการแบบใบเสร็จ มีจุดไข่ปลาเชื่อม */
-.lp-leader {
+/* ============ แถบป้ายไฟ LED วิ่ง (signature) ============ */
+.lp-led {
+  position: relative;
+  background: #051710;
+  border-top: 1px solid rgba(255, 197, 61, 0.25);
+  border-bottom: 1px solid rgba(255, 197, 61, 0.25);
+  overflow: hidden;
+}
+.lp-led-track {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  width: max-content;
+  white-space: nowrap;
+  animation: lp-marquee 36s linear infinite;
 }
-.lp-leader > .fill {
-  flex: 1 1 auto;
-  border-bottom: 2px dotted var(--rule);
-  transform: translateY(-4px);
+.lp-led-group {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
 }
-
-/* เส้นปรุใบเสร็จ */
-.lp-perf {
-  border-top: 2px dashed var(--rule);
+.lp-led-item {
+  font-family: var(--font-mono), sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  color: var(--gold);
+  text-shadow: 0 0 8px rgba(255, 197, 61, 0.6);
+  padding: 0 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 28px;
 }
-
-/* การ์ดสลิปใบเสร็จ + ขอบล่างหยักแบบฉีกกระดาษ */
-.lp-receipt {
-  background: #fff;
-  box-shadow: 0 24px 60px -28px rgba(24, 34, 28, 0.45);
-  -webkit-mask:
-    linear-gradient(#000 0 0) top / 100% calc(100% - 11px) no-repeat,
-    radial-gradient(11px at 11px 100%, #0000 98%, #000) bottom left / 22px 22px repeat-x;
-  mask:
-    linear-gradient(#000 0 0) top / 100% calc(100% - 11px) no-repeat,
-    radial-gradient(11px at 11px 100%, #0000 98%, #000) bottom left / 22px 22px repeat-x;
-  animation: lp-print 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+.lp-led-item::after {
+  content: "◆";
+  font-size: 9px;
+  opacity: 0.7;
 }
-@keyframes lp-print {
-  from {
-    clip-path: inset(0 0 100% 0);
-    opacity: 0.5;
-  }
+/* ตะแกรงจุดทับ ให้ความรู้สึก dot-matrix */
+.lp-led::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(rgba(5, 23, 16, 0.65) 0.9px, transparent 1px);
+  background-size: 3.5px 3.5px;
+}
+@keyframes lp-marquee {
   to {
-    clip-path: inset(0 0 0 0);
-    opacity: 1;
+    transform: translateX(-50%);
   }
 }
 
-/* ตั๋ว/ป้ายราคา มีรอยบากสองข้าง */
-.lp-ticket {
-  background: #fff;
-  -webkit-mask:
-    radial-gradient(circle 9px at 0 64px, #0000 9px, #000 0),
-    radial-gradient(circle 9px at 100% 64px, #0000 9px, #000 0);
-  -webkit-mask-composite: source-in;
-  mask:
-    radial-gradient(circle 9px at 0 64px, #0000 9px, #000 0),
-    radial-gradient(circle 9px at 100% 64px, #0000 9px, #000 0);
-  mask-composite: intersect;
-}
-
-/* แสตมป์หมึก */
+/* ป้าย/แบดจ์ */
 .lp-stamp {
-  font-family: var(--font-mono), monospace;
-  color: var(--stamp);
-  border: 2px solid var(--stamp);
-  border-radius: 6px;
-  padding: 4px 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  transform: rotate(-7deg);
-  opacity: 0.92;
+  font-family: var(--font-mono), sans-serif;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--gold);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  box-shadow: 0 6px 16px -8px rgba(255, 197, 61, 0.9);
 }
 
-/* บาร์โค้ด CSS */
-.lp-barcode {
-  height: 44px;
-  background-image: repeating-linear-gradient(
-    90deg,
-    var(--ink) 0 2px,
-    transparent 2px 4px,
-    var(--ink) 4px 7px,
-    transparent 7px 9px,
-    var(--ink) 9px 10px,
-    transparent 10px 13px
-  );
-}
-
-.lp-btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold transition-transform;
-}
+/* ============ ปุ่ม ============ */
 .lp-btn-solid {
-  @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold transition-transform;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition-colors;
   background: var(--green);
   color: #fff;
 }
@@ -196,58 +186,91 @@ body {
   background: var(--green-d);
 }
 .lp-btn-ghost {
-  @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold transition-colors;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition-colors;
   border: 1.5px solid var(--ink);
   color: var(--ink);
 }
 .lp-btn-ghost:hover {
   background: var(--ink);
-  color: var(--paper);
+  color: #fff;
+}
+/* ปุ่มทอง สำหรับพื้นเขียวเข้ม */
+.lp-btn-gold {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-bold transition-transform;
+  background: var(--gold);
+  color: var(--ink);
+  box-shadow: 0 14px 34px -14px rgba(255, 197, 61, 0.75);
+}
+.lp-btn-gold:hover {
+  transform: translateY(-2px);
+}
+/* ปุ่มโปร่ง สำหรับพื้นเขียวเข้ม */
+.lp-btn-outline-light {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-semibold transition-colors;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+}
+.lp-btn-outline-light:hover {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-/* ระบบการ์ดใหม่ — เงานุ่ม ยกตอน hover */
+/* ============ การ์ด ============ */
 .lp-card {
   background: #fff;
   border: 1px solid var(--rule);
-  border-radius: 18px;
+  border-radius: 20px;
   box-shadow:
-    0 1px 2px rgba(24, 34, 28, 0.04),
-    0 14px 30px -20px rgba(24, 34, 28, 0.28);
+    0 1px 2px rgba(16, 35, 26, 0.04),
+    0 16px 34px -24px rgba(16, 35, 26, 0.3);
   transition:
     transform 0.2s ease,
-    box-shadow 0.2s ease;
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
 }
 .lp-card:hover {
   transform: translateY(-3px);
+  border-color: rgba(10, 122, 65, 0.35);
   box-shadow:
-    0 1px 2px rgba(24, 34, 28, 0.04),
-    0 24px 46px -22px rgba(14, 122, 67, 0.38);
+    0 1px 2px rgba(16, 35, 26, 0.04),
+    0 26px 48px -24px rgba(10, 122, 65, 0.35);
 }
 
-/* ชิปไอคอน */
+/* ชิปไอคอน (SVG) */
 .lp-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 15px;
-  background: rgba(14, 122, 67, 0.1);
-  font-size: 26px;
-  line-height: 1;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(10, 122, 65, 0.09);
+  color: var(--green);
 }
 .lp-chip-lg {
-  width: 64px;
-  height: 64px;
+  width: 58px;
+  height: 58px;
+  border-radius: 17px;
+}
+.lp-chip-gold {
+  background: rgba(255, 197, 61, 0.16);
+  color: var(--gold-d);
+}
+
+/* การ์ด UI จำลองบนพื้นเขียวเข้ม */
+.lp-glass {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 18px;
-  font-size: 32px;
+  backdrop-filter: blur(6px);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lp-receipt {
+  .lp-led-track {
     animation: none;
   }
-  .lp-card:hover {
+  .lp-card:hover,
+  .lp-btn-gold:hover {
     transform: none;
   }
 }

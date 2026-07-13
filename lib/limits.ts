@@ -3,7 +3,14 @@ import { redirect } from "next/navigation";
 import { query, one } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { planForOrg, PLANS } from "@/lib/plans";
-import { planAllowsPath, minPlanForPath, isOwnerOnlyPath } from "@/components/nav";
+import {
+  planAllowsPath,
+  minPlanForPath,
+  roleAllowsPath,
+  ROLE_RANK,
+  ROLE_LABELS,
+  type Role,
+} from "@/components/nav";
 import type { OrgContext } from "@/lib/guard";
 import type { Subscription } from "@/lib/types";
 
@@ -25,13 +32,27 @@ export function requirePlanForPath(ctx: OrgContext, path: string): void {
 }
 
 /**
- * guard หน้าเฉพาะเจ้าของร้าน — พนักงานเข้า path ใน OWNER_ONLY_PATHS ไม่ได้ → เด้ง /dashboard
+ * guard หน้าตามบทบาท (cashier < manager < owner) — บทบาทต่ำกว่าขั้นต่ำของ path → เด้ง /dashboard
  * (เมนูซ่อนอยู่แล้วใน navGroupsForRole แต่การซ่อนเมนูกันแค่ตอน render — พิมพ์ URL ตรงยังเข้าได้
  * จึงต้องบังคับที่ layout เหมือน assertPlanForPath)
  */
 export function assertRoleForPath(role: string, path: string): void {
-  if (role !== "owner" && isOwnerOnlyPath(path)) {
+  if (!roleAllowsPath(role, path)) {
     redirect("/dashboard");
+  }
+}
+
+/**
+ * เช็คบทบาทขั้นต่ำแบบ "โยน error" (ไม่ redirect) — สำหรับ server action ที่ครอบ try/catch
+ * เหตุผลเดียวกับ assertPlanAllows: action เป็น endpoint แยก เรียกตรงได้ ต้อง gate ในตัวเอง
+ * (role แปลก ๆ นับเป็นพนักงาน — สิทธิ์ต่ำสุด)
+ */
+export function assertRoleAtLeast(
+  role: string | undefined,
+  min: Role,
+): void {
+  if ((ROLE_RANK[role as Role] ?? 0) < ROLE_RANK[min]) {
+    throw new Error(`เฉพาะ${ROLE_LABELS[min]}ขึ้นไปเท่านั้น`);
   }
 }
 
@@ -118,7 +139,7 @@ export type InviteResult = {
 export async function inviteUserToOrg(
   ctx: OrgContext,
   emailRaw: string,
-  role: "owner" | "cashier",
+  role: Role,
 ): Promise<InviteResult> {
   const email = emailRaw.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))

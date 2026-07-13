@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertRoleAtLeast } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -41,7 +42,11 @@ export async function saveCategory(formData: FormData): Promise<Result> {
 
 export async function deleteCategory(id: string): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    const ctx = await getAppContext();
+    if (!ctx?.org) throw new Error("unauthorized");
+    // ลบหมวด = แก้โครงข้อมูลย้อนหลัง — ผู้จัดการขึ้นไป
+    assertRoleAtLeast(ctx.membership?.role, "manager");
+    const orgId = ctx.org.id;
     // สินค้าในหมวดจะถูกตั้ง category_id = null อัตโนมัติ (FK on delete set null)
     await query("delete from categories where id=$1 and org_id=$2", [id, orgId]);
     revalidatePath("/categories");

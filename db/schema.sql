@@ -53,7 +53,7 @@ create table if not exists memberships (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references organizations(id) on delete cascade,
   user_id uuid not null references users(id) on delete cascade,
-  role text not null default 'cashier' check (role in ('owner','cashier')),
+  role text not null default 'cashier' check (role in ('owner','manager','cashier')),
   created_at timestamptz not null default now(),
   unique (org_id, user_id)
 );

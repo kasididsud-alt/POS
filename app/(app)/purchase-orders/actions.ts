@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
-import { assertPlanAllows } from "@/lib/limits";
+import { assertPlanAllows, assertRoleAtLeast } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -17,8 +17,7 @@ export async function createPO(input: {
   try {
     const ctx = await getAppContext();
     if (!ctx?.org) throw new Error("unauthorized");
-    if (ctx.membership?.role !== "owner")
-      throw new Error("เฉพาะเจ้าของร้านเท่านั้น");
+    assertRoleAtLeast(ctx.membership?.role, "manager"); // ผู้จัดการขึ้นไป — จัดการได้ แต่ไม่ใช่เรื่องเงิน/ทีมงาน
     // ใบสั่งซื้อ (PO) = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
     assertPlanAllows(ctx.subscription, "/purchase-orders");
     const items = (input.items ?? []).filter((i) => i.product_id && i.qty > 0);
@@ -44,8 +43,7 @@ export async function receivePO(poId: string): Promise<Result> {
     // ไม่งั้นของที่มาส่งจริงรับเข้าสต็อกไม่ได้ (สร้าง PO ใหม่ถูก gate อยู่แล้ว)
     const ctx = await getAppContext();
     if (!ctx?.org) throw new Error("unauthorized");
-    if (ctx.membership?.role !== "owner")
-      throw new Error("เฉพาะเจ้าของร้านเท่านั้น");
+    assertRoleAtLeast(ctx.membership?.role, "manager"); // ผู้จัดการขึ้นไป — จัดการได้ แต่ไม่ใช่เรื่องเงิน/ทีมงาน
     // ตรวจว่า PO อยู่ใน org นี้
     const po = await one("select id from purchase_orders where id=$1 and org_id=$2", [
       poId,
@@ -68,8 +66,7 @@ export async function cancelPO(poId: string): Promise<Result> {
   try {
     const ctx = await getAppContext();
     if (!ctx?.org) throw new Error("unauthorized");
-    if (ctx.membership?.role !== "owner")
-      throw new Error("เฉพาะเจ้าของร้านเท่านั้น");
+    assertRoleAtLeast(ctx.membership?.role, "manager"); // ผู้จัดการขึ้นไป — จัดการได้ แต่ไม่ใช่เรื่องเงิน/ทีมงาน
     await query(
       "update purchase_orders set status='cancelled' where id=$1 and org_id=$2 and status='ordered'",
       [poId, ctx.org.id],

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
-import { productLimitError } from "@/lib/limits";
+import { productLimitError, assertRoleAtLeast } from "@/lib/limits";
 import { logAudit } from "@/lib/audit";
 import { generateInternalEAN13 } from "@/lib/barcode";
 
@@ -58,6 +58,8 @@ export async function saveProduct(formData: FormData): Promise<ActionResult> {
     }
 
     if (id) {
+      // แก้ไขสินค้าเดิม (รวมราคา/ต้นทุน) — ผู้จัดการขึ้นไป; แคชเชียร์เพิ่มสินค้าใหม่ได้อย่างเดียว
+      assertRoleAtLeast(ctx.membership?.role, "manager");
       await query(
         `update products set name=$1, sku=$2, barcode=$3, price=$4, cost=$5,
                 unit=$6, low_stock_threshold=$7, category_id=$8, image_url=$9
@@ -172,10 +174,12 @@ export async function assignMissingBarcodes(): Promise<
 
 export async function receiveStock(formData: FormData): Promise<ActionResult> {
   try {
-    const { orgId, userId, branchId } = await requireOrg();
+    const { ctx, orgId, userId, branchId } = await requireOrg();
     const productId = String(formData.get("product_id") ?? "");
     const qty = Number(formData.get("qty") ?? 0);
     const reason = String(formData.get("reason") ?? "purchase");
+    // "ปรับยอด" = เปลี่ยนความจริงย้อนหลัง — ผู้จัดการขึ้นไป (รับของเข้าปกติแคชเชียร์ทำได้)
+    if (reason === "adjust") assertRoleAtLeast(ctx.membership?.role, "manager");
     const note = String(formData.get("note") ?? "").trim() || null;
     if (!productId || qty === 0)
       return { ok: false, error: "ระบุสินค้าและจำนวน" };
@@ -209,7 +213,9 @@ export async function receiveStock(formData: FormData): Promise<ActionResult> {
 
 export async function reduceStock(formData: FormData): Promise<ActionResult> {
   try {
-    const { orgId, userId, branchId } = await requireOrg();
+    const { ctx, orgId, userId, branchId } = await requireOrg();
+    // ปรับลดสต็อกนอกบิลขาย — ผู้จัดการขึ้นไป
+    assertRoleAtLeast(ctx.membership?.role, "manager");
     const productId = String(formData.get("product_id") ?? "");
     const qty = Math.abs(Number(formData.get("qty") ?? 0));
     const note = String(formData.get("note") ?? "").trim() || null;
@@ -258,7 +264,9 @@ export async function createCategory(formData: FormData): Promise<ActionResult> 
 
 export async function deleteProduct(id: string): Promise<ActionResult> {
   try {
-    const { orgId, userId } = await requireOrg();
+    const { ctx, orgId, userId } = await requireOrg();
+    // ลบสินค้า = กลบร่องรอย — ผู้จัดการขึ้นไป
+    assertRoleAtLeast(ctx.membership?.role, "manager");
     await query(
       "update products set is_active = false where id = $1 and org_id = $2",
       [id, orgId],

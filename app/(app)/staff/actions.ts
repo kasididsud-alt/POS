@@ -24,13 +24,13 @@ export async function inviteStaff(formData: FormData): Promise<Result> {
     assertPlanAllows(ctx.subscription, "/staff");
     const email = String(formData.get("email") ?? "");
     const role = String(formData.get("role") ?? "cashier");
-    if (!["owner", "cashier"].includes(role))
+    if (!["owner", "manager", "cashier"].includes(role))
       return { ok: false, error: "บทบาทไม่ถูกต้อง" };
 
     const result = await inviteUserToOrg(
       ctx as OrgContext,
       email,
-      role as "owner" | "cashier",
+      role as "owner" | "manager" | "cashier",
     );
     if (result.ok) revalidatePath("/staff");
     return result;
@@ -45,7 +45,7 @@ export async function changeRole(
 ): Promise<Result> {
   try {
     const ctx = await requireOwner();
-    if (!["owner", "cashier"].includes(role))
+    if (!["owner", "manager", "cashier"].includes(role))
       return { ok: false, error: "บทบาทไม่ถูกต้อง" };
     if (userId === ctx.userId)
       return { ok: false, error: "เปลี่ยนบทบาทตัวเองไม่ได้" };

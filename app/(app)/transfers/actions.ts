@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
-import { assertPlanAllows } from "@/lib/limits";
+import { assertPlanAllows, assertRoleAtLeast } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 type TLine = { product_id: string; name: string; qty: number };
@@ -19,6 +19,8 @@ export async function createTransfer(input: {
     if (!ctx?.org) throw new Error("unauthorized");
     // โอนย้ายคลัง/สาขา = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
     assertPlanAllows(ctx.subscription, "/transfers");
+    // ใบโอนเคลื่อนของมูลค่าสูง — ผู้จัดการขึ้นไป
+    assertRoleAtLeast(ctx.membership?.role, "manager");
     if (!input.from_branch_id || !input.to_branch_id)
       return { ok: false, error: "เลือกสาขาต้นทางและปลายทาง" };
     if (input.from_branch_id === input.to_branch_id)
@@ -66,6 +68,8 @@ export async function setTransferStatus(
     // ร้านที่ดาวน์เกรดต้องกดรับ/ยกเลิกเพื่อไม่ให้สต็อกค้างกลางทาง (สร้างใบใหม่ถูก gate อยู่แล้ว)
     const ctx = await getAppContext();
     if (!ctx?.org) throw new Error("unauthorized");
+    // รับ/ยกเลิกใบโอนขยับสต็อกจริง — ผู้จัดการขึ้นไป (แพ็กไม่ gate ตรงนี้ แต่บทบาทต้อง gate)
+    assertRoleAtLeast(ctx.membership?.role, "manager");
     const t = await one("select id from stock_transfers where id=$1 and org_id=$2", [
       id,
       ctx.org.id,

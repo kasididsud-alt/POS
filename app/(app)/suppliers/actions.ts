@@ -3,15 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
-import { assertPlanAllows } from "@/lib/limits";
+import { assertPlanAllows, assertRoleAtLeast } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
 async function requireOrg() {
   const ctx = await getAppContext();
   if (!ctx?.org) throw new Error("unauthorized");
-  if (ctx.membership?.role !== "owner")
-    throw new Error("เฉพาะเจ้าของร้านเท่านั้น");
+  assertRoleAtLeast(ctx.membership?.role, "manager"); // ผู้จัดการขึ้นไป — จัดการได้ แต่ไม่ใช่เรื่องเงิน/ทีมงาน
   return ctx;
 }
 

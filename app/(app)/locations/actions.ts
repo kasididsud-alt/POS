@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
-import { assertPlanAllows } from "@/lib/limits";
+import { assertPlanAllows, assertRoleAtLeast } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -18,6 +18,8 @@ export async function saveLocation(formData: FormData): Promise<Result> {
     const ctx = await requireOrg();
     // ตำแหน่งจัดเก็บ = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
     assertPlanAllows(ctx.subscription, "/locations");
+    // โครงข้อมูลคลัง (ตำแหน่งจัดเก็บ) — ผู้จัดการขึ้นไป
+    assertRoleAtLeast(ctx.membership?.role, "manager");
     const orgId = ctx.org!.id;
     const id = String(formData.get("id") ?? "").trim();
     const code = String(formData.get("code") ?? "").trim();
@@ -46,7 +48,10 @@ export async function saveLocation(formData: FormData): Promise<Result> {
 export async function deleteLocation(id: string): Promise<Result> {
   try {
     // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดยังเก็บกวาดข้อมูลเดิมได้
-    const orgId = (await requireOrg()).org!.id;
+    const ctx = await requireOrg();
+    // ลบตำแหน่งจัดเก็บ = แก้ข้อมูลคลังย้อนหลัง — ผู้จัดการขึ้นไป
+    assertRoleAtLeast(ctx.membership?.role, "manager");
+    const orgId = ctx.org!.id;
     await query("delete from storage_locations where id=$1 and org_id=$2", [id, orgId]);
     revalidatePath("/locations");
     return { ok: true };

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
-import { assertPlanAllows } from "@/lib/limits";
+import { assertPlanAllows, assertRoleAtLeast } from "@/lib/limits";
 
 type CountLine = { product_id: string; counted: number };
 type Result = { ok: boolean; error?: string; adjusted?: number };
@@ -14,6 +14,8 @@ export async function applyCount(lines: CountLine[]): Promise<Result> {
     if (!ctx?.org) throw new Error("unauthorized");
     // ตรวจนับสต็อก = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
     assertPlanAllows(ctx.subscription, "/stock-count");
+    // ยืนยันผลนับ = ระบบปรับยอดจริง — ผู้จัดการขึ้นไป (แคชเชียร์เป็นคนนับ แต่คนกดยืนยันต้องระดับบริหาร)
+    assertRoleAtLeast(ctx.membership?.role, "manager");
     const orgId = ctx.org.id;
     const branchId = ctx.branchId;
     if (!branchId) return { ok: false, error: "ยังไม่ได้กำหนดสาขา" };

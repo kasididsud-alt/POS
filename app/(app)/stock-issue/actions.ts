@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertRoleAtLeast } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -10,6 +11,8 @@ export async function issueStock(formData: FormData): Promise<Result> {
   try {
     const ctx = await getAppContext();
     if (!ctx?.org) throw new Error("unauthorized");
+    // ตัดจ่ายสต็อกนอกบิลขาย = ช่องทางของออกจากคลังโดยไม่มีบิล — ผู้จัดการขึ้นไป
+    assertRoleAtLeast(ctx.membership?.role, "manager");
 
     const productId = String(formData.get("product_id") ?? "");
     const qty = Number(formData.get("qty") ?? 0);

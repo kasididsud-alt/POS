@@ -47,7 +47,7 @@ export default function StaffClient({
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold">พนักงาน & สิทธิ์</h1>
       <p className="text-sm text-[var(--muted)]">
-        เจ้าของร้านจัดการทีมงานได้ — พนักงาน (cashier) เข้าใช้ POS และดูข้อมูลได้
+        เจ้าของร้านจัดการทีมงานได้ — ผู้จัดการดูแลสินค้า/สต็อก/จัดซื้อ ส่วนพนักงานใช้ POS งานหน้าร้าน
       </p>
 
       {msg && (
@@ -104,11 +104,12 @@ export default function StaffClient({
                   disabled={pending}
                 >
                   <option value="owner">เจ้าของร้าน</option>
+                  <option value="manager">ผู้จัดการ</option>
                   <option value="cashier">พนักงาน</option>
                 </select>
               ) : (
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">
-                  {m.role === "owner" ? "เจ้าของร้าน" : "พนักงาน"}
+                  {m.role === "owner" ? "เจ้าของร้าน" : m.role === "manager" ? "ผู้จัดการ" : "พนักงาน"}
                 </span>
               )}
               {isOwner && m.user_id !== currentUserId && (
@@ -143,6 +144,7 @@ export default function StaffClient({
             />
             <select name="role" className="input w-32" defaultValue="cashier">
               <option value="cashier">พนักงาน</option>
+              <option value="manager">ผู้จัดการ</option>
               <option value="owner">เจ้าของร้าน</option>
             </select>
             <button disabled={pending} className="btn-primary">

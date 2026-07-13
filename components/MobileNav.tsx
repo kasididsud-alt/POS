@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MOBILE_NAV, OWNER_ONLY_PATHS, planAllowsPath, type PlanTier } from "./nav";
+import { MOBILE_NAV, roleAllowsPath, planAllowsPath, type PlanTier } from "./nav";
 
 export default function MobileNav({
   role,
@@ -12,11 +12,9 @@ export default function MobileNav({
   plan: PlanTier;
 }) {
   const pathname = usePathname();
-  const items = (
-    role === "owner"
-      ? MOBILE_NAV
-      : MOBILE_NAV.filter((i) => !OWNER_ONLY_PATHS.has(i.href))
-  ).filter((i) => planAllowsPath(plan, i.href));
+  const items = MOBILE_NAV.filter(
+    (i) => roleAllowsPath(role, i.href) && planAllowsPath(plan, i.href),
+  );
   return (
     <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-[var(--border)] bg-white md:hidden">
       {items.map((item) => {

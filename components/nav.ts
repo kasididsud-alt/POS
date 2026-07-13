@@ -7,28 +7,49 @@ export type NavItem = {
 };
 export type NavGroup = { title: string; items: NavItem[] };
 
-/** เส้นทางเฉพาะเจ้าของร้าน (พนักงานเข้าไม่ได้) */
-export const OWNER_ONLY_PATHS = new Set([
-  "/suppliers",
-  "/purchase-orders",
-  "/promotions",
-  "/receivables",
-  "/reports",
-  "/vat-report",
-  "/settings",
-  "/billing",
-  "/branches",
-  "/staff",
-  "/audit",
-  "/integrations",
-]);
+// ---- สิทธิ์ตามบทบาท (cashier < manager < owner) ----
+export type Role = "cashier" | "manager" | "owner";
+export const ROLE_RANK: Record<Role, number> = { cashier: 0, manager: 1, owner: 2 };
+export const ROLE_LABELS: Record<Role, string> = {
+  owner: "เจ้าของร้าน",
+  manager: "ผู้จัดการ",
+  cashier: "พนักงาน",
+};
 
-/** path นี้เฉพาะเจ้าของร้านไหม (รองรับ sub-path เช่น /reports/daily) */
-export function isOwnerOnlyPath(path: string): boolean {
-  for (const p of OWNER_ONLY_PATHS) {
-    if (path === p || path.startsWith(p + "/")) return true;
+/**
+ * path → บทบาทขั้นต่ำที่เข้าได้ (ไม่อยู่ในตาราง = พนักงานเข้าได้)
+ * หลัก: งานหน้าร้านประจำวันเปิดหมด / จัดการสินค้า-สต็อก-จัดซื้อ = ผู้จัดการ /
+ * เงิน-กำไร-ภาษี-โครงสร้างร้าน-ทีมงาน = เจ้าของเท่านั้น
+ */
+export const MIN_ROLE_FOR_PATH: Record<string, Role> = {
+  // ผู้จัดการขึ้นไป
+  "/suppliers": "manager",
+  "/purchase-orders": "manager",
+  "/promotions": "manager",
+  // เจ้าของเท่านั้น
+  "/receivables": "owner",
+  "/reports": "owner",
+  "/vat-report": "owner",
+  "/settings": "owner",
+  "/billing": "owner",
+  "/branches": "owner",
+  "/staff": "owner",
+  "/audit": "owner",
+  "/integrations": "owner",
+};
+
+/** บทบาทขั้นต่ำของ path (รองรับ sub-path เช่น /reports/daily) */
+export function minRoleForPath(path: string): Role {
+  for (const [p, role] of Object.entries(MIN_ROLE_FOR_PATH)) {
+    if (path === p || path.startsWith(p + "/")) return role;
   }
-  return false;
+  return "cashier";
+}
+
+/** บทบาทนี้เข้า path นี้ได้ไหม (role แปลก ๆ นับเป็นพนักงาน — สิทธิ์ต่ำสุด) */
+export function roleAllowsPath(role: string, path: string): boolean {
+  const rank = ROLE_RANK[role as Role] ?? 0;
+  return rank >= ROLE_RANK[minRoleForPath(path)];
 }
 
 /** กรองเมนูตาม role */
@@ -36,7 +57,7 @@ export function navGroupsForRole(role: string): NavGroup[] {
   if (role === "owner") return NAV_GROUPS;
   return NAV_GROUPS.map((g) => ({
     ...g,
-    items: g.items.filter((i) => !OWNER_ONLY_PATHS.has(i.href)),
+    items: g.items.filter((i) => roleAllowsPath(role, i.href)),
   })).filter((g) => g.items.length > 0);
 }
 

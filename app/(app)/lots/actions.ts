@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
-import { assertPlanAllows } from "@/lib/limits";
+import { assertPlanAllows, assertRoleAtLeast } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -18,6 +18,8 @@ export async function saveLot(formData: FormData): Promise<Result> {
     const ctx = await requireOrg();
     // Lot & วันหมดอายุ = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
     assertPlanAllows(ctx.subscription, "/lots");
+    // โครงข้อมูลคลัง (lot/วันหมดอายุ) — ผู้จัดการขึ้นไป
+    assertRoleAtLeast(ctx.membership?.role, "manager");
     const orgId = ctx.org!.id;
     const id = String(formData.get("id") ?? "").trim();
     const productId = String(formData.get("product_id") ?? "").trim();
@@ -47,7 +49,10 @@ export async function saveLot(formData: FormData): Promise<Result> {
 export async function deleteLot(id: string): Promise<Result> {
   try {
     // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดยังเก็บกวาดข้อมูลเดิมได้
-    const orgId = (await requireOrg()).org!.id;
+    const ctx = await requireOrg();
+    // ลบ lot = แก้ข้อมูลคลังย้อนหลัง — ผู้จัดการขึ้นไป
+    assertRoleAtLeast(ctx.membership?.role, "manager");
+    const orgId = ctx.org!.id;
     await query("delete from product_lots where id=$1 and org_id=$2", [id, orgId]);
     revalidatePath("/lots");
     return { ok: true };

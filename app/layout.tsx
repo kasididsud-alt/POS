@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Noto_Sans_Thai, Bai_Jamjuree, Space_Mono } from "next/font/google";
+import { Noto_Sans_Thai, Prompt, Chakra_Petch } from "next/font/google";
 import "./globals.css";
 
 const notoThai = Noto_Sans_Thai({
@@ -8,18 +8,18 @@ const notoThai = Noto_Sans_Thai({
   weight: ["400", "500", "600", "700"],
 });
 
-// ฟอนต์หัวข้อ (ไทย geometric) สำหรับหน้า landing
-const baiJamjuree = Bai_Jamjuree({
+// ฟอนต์หัวข้อ (ไทย geometric หนักแน่น) สำหรับหน้า landing
+const prompt = Prompt({
   variable: "--font-display",
   subsets: ["thai", "latin"],
-  weight: ["600", "700"],
+  weight: ["500", "600", "700"],
 });
 
-// ฟอนต์ mono สำหรับตัวเลข/ป้ายราคา/บาร์โค้ด (โทนใบเสร็จ)
-const spaceMono = Space_Mono({
+// ฟอนต์เหลี่ยมสไตล์ป้ายไฟ/ตัวเลข (รองรับไทย) สำหรับตัวเลข ป้ายกำกับ และแถบ LED
+const chakra = Chakra_Petch({
   variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "700"],
+  subsets: ["thai", "latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
@@ -82,7 +82,7 @@ export default function RootLayout({
   return (
     <html
       lang="th"
-      className={`${notoThai.variable} ${baiJamjuree.variable} ${spaceMono.variable} h-full antialiased`}
+      className={`${notoThai.variable} ${prompt.variable} ${chakra.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
