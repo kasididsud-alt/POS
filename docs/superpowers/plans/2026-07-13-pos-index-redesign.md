@@ -337,7 +337,7 @@ test("Hero uses the selected local image accessibly", async () => {
   const hero = await read("components/landing/Hero.tsx");
   assert.match(hero, /retail-command-center\.png/);
   assert.match(hero, /alt=""/);
-  assert.match(hero, /priority/);
+  assert.match(hero, /preload/);
   assert.match(hero, /sizes="100vw"/);
 });
 
@@ -435,7 +435,7 @@ export default function LiveTicker() {
 Create components/landing/Hero.tsx with:
 
 - a sticky header containing LogoMark, links to #product, #features, /pricing, /login, and the auth-aware /dashboard or /signup CTA
-- next/image using src /images/landing/retail-command-center.png, fill, priority, sizes="100vw", alt="", object-cover, and a right-biased object position on mobile
+- next/image using src /images/landing/retail-command-center.png, fill, preload, sizes="100vw", alt="", object-cover, and a right-biased object position on mobile
 - an opaque navy gradient between image and text
 - a glass panel containing eyebrow, approved H1, supporting copy, primary and secondary CTA
 - three compact stat cards that never cover the employee face or POS

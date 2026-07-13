@@ -111,7 +111,7 @@ Each section gets one clear heading, concise supporting copy, and a single purpo
 - Intrinsic dimensions: `1672 × 941`
 - Role: atmospheric hero background; the real employee, POS terminal, and stocked minimart establish credibility.
 - Composition: preserve the employee and terminal on the right and the clean negative space on the left.
-- Render above the fold with `next/image`, reserved dimensions/fill, `priority`, and responsive `sizes="100vw"`.
+- Render above the fold with `next/image`, reserved dimensions/fill, `preload`, and responsive `sizes="100vw"`.
 - The image is decorative behind equivalent page copy, so use `alt=""`. Do not repeat surrounding copy as alt text.
 - Keep an opaque navy gradient between the photograph and text. Reposition/crop at narrow breakpoints instead of covering the employee’s face or POS with cards.
 
