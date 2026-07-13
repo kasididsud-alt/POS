@@ -5,6 +5,27 @@ import test from "node:test";
 const read = (path: string) =>
   readFile(new URL("../" + path, import.meta.url), "utf8");
 
+const LANDING_SECTION_EXPORTS = [
+  "Outcomes",
+  "RetailWorkflow",
+  "FeatureGrid",
+  "StoreFit",
+  "LandingFaq",
+  "ClosingCta",
+  "LandingFooter",
+] as const;
+
+const exportedFunctionSource = (
+  source: string,
+  exportName: (typeof LANDING_SECTION_EXPORTS)[number],
+) => {
+  const marker = `export function ${exportName}`;
+  const start = source.indexOf(marker);
+  assert.notEqual(start, -1, `${exportName} export must exist`);
+  const nextStart = source.indexOf("\nexport function ", start + marker.length);
+  return source.slice(start, nextStart === -1 ? source.length : nextStart);
+};
+
 test("Hero uses the selected local image accessibly", async () => {
   const hero = await read("components/landing/Hero.tsx");
   const image = hero.match(/<Image\b[\s\S]*?\/>/)?.[0];
@@ -183,18 +204,71 @@ test("Product Showcase checkout affordance is clearly a preview", async () => {
 
 test("landing sections expose the approved conversion sequence", async () => {
   const source = await read("components/landing/LandingSections.tsx");
-  for (const exportName of [
-    "Outcomes",
-    "RetailWorkflow",
-    "FeatureGrid",
-    "StoreFit",
-    "LandingFaq",
-    "ClosingCta",
-    "LandingFooter",
-  ]) {
+  for (const exportName of LANDING_SECTION_EXPORTS) {
     assert.match(source, new RegExp("export function " + exportName));
   }
   assert.match(source, /id="features"/);
   assert.match(source, /<details/);
   assert.match(source, /<summary/);
+});
+
+test("landing section boundaries each expose exactly one H2", async () => {
+  const source = await read("components/landing/LandingSections.tsx");
+  for (const exportName of LANDING_SECTION_EXPORTS) {
+    const component = exportedFunctionSource(source, exportName);
+    assert.equal(
+      [...component.matchAll(/<h2\b/g)].length,
+      1,
+      `${exportName} must render exactly one H2`,
+    );
+  }
+});
+
+test("Closing CTA keeps auth-aware primary routes", async () => {
+  const source = await read("components/landing/LandingSections.tsx");
+  const closingCta = exportedFunctionSource(source, "ClosingCta");
+  assert.match(
+    closingCta,
+    /const primaryHref = isAuthed \? "\/dashboard" : "\/signup";/,
+  );
+  assert.match(closingCta, /href="\/pricing"/);
+});
+
+test("Landing Footer renders the current year from the server", async () => {
+  const source = await read("components/landing/LandingSections.tsx");
+  const footer = exportedFunctionSource(source, "LandingFooter");
+  assert.match(footer, /new Date\(\)\.getFullYear\(\)/);
+  assert.match(footer, /© \{currentYear\}/);
+});
+
+test("Landing Footer links guarantee 44 by 44 pixel targets", async () => {
+  const source = await read("components/landing/LandingSections.tsx");
+  const footer = exportedFunctionSource(source, "LandingFooter");
+  const targets = [...footer.matchAll(/<(?:a|Link)\b[\s\S]*?>/g)];
+  assert.equal(targets.length, 5, "all five footer links must be auditable");
+
+  for (const [openingTag] of targets) {
+    const classes = openingTag.match(/className="([^"]*)"/)?.[1];
+    assert.ok(classes, `footer target needs classes: ${openingTag}`);
+    const tokens = new Set(classes.split(/\s+/));
+    for (const token of ["inline-flex", "min-h-11", "min-w-11", "items-center"]) {
+      assert.ok(tokens.has(token), `footer target is missing ${token}`);
+    }
+  }
+});
+
+test("Feature bento uses wide cards only at desktop", async () => {
+  const source = await read("components/landing/LandingSections.tsx");
+  const featureGrid = exportedFunctionSource(source, "FeatureGrid");
+  assert.match(featureGrid, /isWide \? "lg:col-span-2" : ""/);
+  assert.doesNotMatch(featureGrid, /md:col-span-2/);
+});
+
+test("FAQ arrow transition respects reduced motion", async () => {
+  const source = await read("components/landing/LandingSections.tsx");
+  const faq = exportedFunctionSource(source, "LandingFaq");
+  assert.match(
+    faq,
+    /transition-transform[^"\n]*motion-reduce:transition-none/,
+  );
 });

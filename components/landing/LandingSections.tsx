@@ -123,7 +123,7 @@ export function FeatureGrid() {
               <article
                 key={feature.id}
                 className={`lp-card min-h-64 overflow-hidden p-6 sm:p-7 ${
-                  isWide ? "md:col-span-2" : ""
+                  isWide ? "lg:col-span-2" : ""
                 }`}
               >
                 <div
@@ -237,7 +237,7 @@ export function LandingFaq() {
                 >
                   <LandingIcon
                     name="arrow"
-                    className="h-5 w-5 transition-transform duration-200 group-open:rotate-90"
+                    className="h-5 w-5 transition-transform duration-200 group-open:rotate-90 motion-reduce:transition-none"
                   />
                 </span>
               </summary>
@@ -341,19 +341,19 @@ export function LandingFooter() {
             <div className="mt-4 flex flex-col items-start gap-2">
               <a
                 href="#product"
-                className="min-h-11 py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
+                className="inline-flex min-h-11 min-w-11 items-center py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
               >
                 ระบบ POS
               </a>
               <a
                 href="#features"
-                className="min-h-11 py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
+                className="inline-flex min-h-11 min-w-11 items-center py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
               >
                 ฟีเจอร์
               </a>
               <Link
                 href="/pricing"
-                className="min-h-11 py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
+                className="inline-flex min-h-11 min-w-11 items-center py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
               >
                 ราคา
               </Link>
@@ -365,13 +365,13 @@ export function LandingFooter() {
             <div className="mt-4 flex flex-col items-start gap-2">
               <Link
                 href="/privacy"
-                className="min-h-11 py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
+                className="inline-flex min-h-11 min-w-11 items-center py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
               >
                 ความเป็นส่วนตัว
               </Link>
               <Link
                 href="/terms"
-                className="min-h-11 py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
+                className="inline-flex min-h-11 min-w-11 items-center py-2 text-base text-white/70 transition-opacity duration-200 hover:opacity-80"
               >
                 ข้อกำหนดการใช้งาน
               </Link>
