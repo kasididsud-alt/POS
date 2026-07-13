@@ -79,6 +79,26 @@ export const PLANS: Record<PlanId, PlanDef> = {
   },
 };
 
+export type PublicPlanDef = Pick<
+  PlanDef,
+  "id" | "name" | "tagline" | "monthly" | "yearly" | "features" | "highlight"
+>;
+
+const PUBLIC_PLAN_IDS = ["free", "pro", "premium"] as const;
+
+export const PUBLIC_PLANS: readonly PublicPlanDef[] = PUBLIC_PLAN_IDS.map((id) => {
+  const plan = PLANS[id];
+  return {
+    id: plan.id,
+    name: plan.name,
+    tagline: plan.tagline,
+    monthly: plan.monthly,
+    yearly: plan.yearly,
+    features: plan.features,
+    highlight: plan.highlight,
+  };
+});
+
 export const PAID_PLAN_IDS: Exclude<PlanId, "free">[] = ["pro", "premium"];
 
 const RANK: Record<PlanId, number> = { free: 0, pro: 1, premium: 2 };

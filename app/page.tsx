@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getAppContext } from "@/lib/auth";
-import { PLANS } from "@/lib/plans";
+import { PLANS, PUBLIC_PLANS } from "@/lib/plans";
 import Pricing from "@/components/landing/Pricing";
 
 export const metadata: Metadata = {
@@ -624,7 +624,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Pricing */}
-      <Pricing />
+      <Pricing tiers={PUBLIC_PLANS} />
 
       {/* FAQ */}
       <section className="mx-auto w-full max-w-3xl px-5 pb-20">

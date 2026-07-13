@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { getAppContext } from "@/lib/auth";
-import { PLANS, type PlanId } from "@/lib/plans";
+import { PLANS, PUBLIC_PLANS, type PlanId } from "@/lib/plans";
 import Pricing from "@/components/landing/Pricing";
 import PricingComparison from "./PricingComparison";
 import PricingFaq from "./PricingFaq";
@@ -151,7 +151,7 @@ export default async function PublicPricingPage() {
       </section>
 
       {/* การ์ดราคา (ใช้ component เดียวกับหน้าแรก) */}
-      <Pricing />
+      <Pricing tiers={PUBLIC_PLANS} />
 
       {/* ตารางเทียบทุกฟีเจอร์ */}
       <section className="mx-auto w-full max-w-6xl px-5 pb-20">

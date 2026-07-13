@@ -272,3 +272,15 @@ test("FAQ arrow transition respects reduced motion", async () => {
     /transition-transform[^"\n]*motion-reduce:transition-none/,
   );
 });
+
+test("public pricing is projected from canonical plan definitions", async () => {
+  const [plans, pricing, pricingPage] = await Promise.all([
+    read("lib/plans.ts"),
+    read("components/landing/Pricing.tsx"),
+    read("app/pricing/page.tsx"),
+  ]);
+  assert.match(plans, /export const PUBLIC_PLANS/);
+  assert.match(plans, /const plan = PLANS\[id\]/);
+  assert.match(pricing, /tiers: readonly PublicPlanDef\[\]/);
+  assert.match(pricingPage, /<Pricing tiers=\{PUBLIC_PLANS\}/);
+});
