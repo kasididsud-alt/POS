@@ -947,7 +947,7 @@ export default async function LandingPage() {
   const isAuthed = Boolean(ctx);
 
   return (
-    <div className="lp">
+    <div className="lp lp-home">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
