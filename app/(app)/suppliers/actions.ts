@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -11,12 +12,15 @@ async function requireOrg() {
   if (!ctx?.org) throw new Error("unauthorized");
   if (ctx.membership?.role !== "owner")
     throw new Error("เฉพาะเจ้าของร้านเท่านั้น");
-  return ctx.org.id;
+  return ctx;
 }
 
 export async function saveSupplier(formData: FormData): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    const ctx = await requireOrg();
+    // ซัพพลายเออร์ = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    assertPlanAllows(ctx.subscription, "/suppliers");
+    const orgId = ctx.org!.id;
     const id = String(formData.get("id") ?? "").trim();
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { ok: false, error: "กรุณากรอกชื่อซัพพลายเออร์" };
@@ -49,7 +53,8 @@ export async function saveSupplier(formData: FormData): Promise<Result> {
 
 export async function deleteSupplier(id: string): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดยังเก็บกวาดข้อมูลเดิมได้
+    const orgId = (await requireOrg()).org!.id;
     await query("delete from suppliers where id=$1 and org_id=$2", [id, orgId]);
     revalidatePath("/suppliers");
     return { ok: true };

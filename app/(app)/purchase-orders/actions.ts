@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -18,6 +19,8 @@ export async function createPO(input: {
     if (!ctx?.org) throw new Error("unauthorized");
     if (ctx.membership?.role !== "owner")
       throw new Error("เฉพาะเจ้าของร้านเท่านั้น");
+    // ใบสั่งซื้อ (PO) = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    assertPlanAllows(ctx.subscription, "/purchase-orders");
     const items = (input.items ?? []).filter((i) => i.product_id && i.qty > 0);
     if (!items.length) return { ok: false, error: "เพิ่มรายการอย่างน้อย 1" };
 
@@ -37,6 +40,8 @@ export async function createPO(input: {
 
 export async function receivePO(poId: string): Promise<Result> {
   try {
+    // ไม่ gate แพ็กตรงรับของ/ยกเลิก — PO ค้าง (สร้างตอนยังเป็น Premium) ต้องปิดงานได้หลังดาวน์เกรด
+    // ไม่งั้นของที่มาส่งจริงรับเข้าสต็อกไม่ได้ (สร้าง PO ใหม่ถูก gate อยู่แล้ว)
     const ctx = await getAppContext();
     if (!ctx?.org) throw new Error("unauthorized");
     if (ctx.membership?.role !== "owner")

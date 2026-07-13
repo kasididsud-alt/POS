@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -11,12 +12,15 @@ async function requireOrg() {
   if (!ctx?.org) throw new Error("unauthorized");
   if (ctx.membership?.role !== "owner")
     throw new Error("เฉพาะเจ้าของร้านเท่านั้น");
-  return ctx.org.id;
+  return ctx;
 }
 
 export async function savePromotion(formData: FormData): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    const ctx = await requireOrg();
+    // โปรโมชั่น/ส่วนลด = ฟีเจอร์แพ็ก Pro — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    assertPlanAllows(ctx.subscription, "/promotions");
+    const orgId = ctx.org!.id;
     const id = String(formData.get("id") ?? "").trim();
     const name = String(formData.get("name") ?? "").trim();
     const type = String(formData.get("type") ?? "percent");
@@ -52,7 +56,8 @@ export async function savePromotion(formData: FormData): Promise<Result> {
 
 export async function deletePromotion(id: string): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดต้องลบโปรที่ยัง active ได้ (ไม่งั้นส่วนลดค้างที่ POS)
+    const orgId = (await requireOrg()).org!.id;
     await query("delete from promotions where id=$1 and org_id=$2", [id, orgId]);
     revalidatePath("/promotions");
     return { ok: true };

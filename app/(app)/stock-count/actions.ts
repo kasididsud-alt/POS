@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertPlanAllows } from "@/lib/limits";
 
 type CountLine = { product_id: string; counted: number };
 type Result = { ok: boolean; error?: string; adjusted?: number };
@@ -11,6 +12,8 @@ export async function applyCount(lines: CountLine[]): Promise<Result> {
   try {
     const ctx = await getAppContext();
     if (!ctx?.org) throw new Error("unauthorized");
+    // ตรวจนับสต็อก = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    assertPlanAllows(ctx.subscription, "/stock-count");
     const orgId = ctx.org.id;
     const branchId = ctx.branchId;
     if (!branchId) return { ok: false, error: "ยังไม่ได้กำหนดสาขา" };

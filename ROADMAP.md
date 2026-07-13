@@ -15,8 +15,8 @@
 
 ### ค้างไว้เป็น backlog (จาก audit — ยังไม่วิกฤต)
 - P2-6: product/user limit เป็น check-then-insert (race เกินโควตาได้เล็กน้อยตอน concurrent) — แก้ด้วย advisory lock หรือ insert...where count<max
-- P1-4 ส่วนที่เหลือ: plan gating one-liner (`assertPlanAllows`) ยังไม่ใส่ใน transfers/purchase-orders/promotions/suppliers/receivables/stock-count/locations/lots
-- `po_no`/`so_no` ยังใช้ count(*)+1 (race แบบเดียวกับ bill_no ที่แก้แล้ว)
+- ~~P1-4 ส่วนที่เหลือ: plan gating~~ — ✅ เสร็จ 2026-07-13: `assertPlanAllows` ครบ 12 โมดูล (รวม pro-tier: customers/members/sales-orders/staff ที่ ROADMAP เดิมตกสำรวจ) + test/plan-gating.test.ts ~60 เทสต์; action ฝั่ง "ปิดงานเก่า/ลดข้อมูล" (receivePO, setTransferStatus, recordPayment, delete*) จงใจไม่ gate เพื่อไม่ให้ร้านดาวน์เกรดมีสต็อก/หนี้ค้าง (มี comment ในโค้ด)
+- ~~`po_no`/`so_no` ยังใช้ count(*)+1~~ — ✅ เสร็จ 2026-07-13: migration 28 (dedup เก่า + unique (org_id, po_no)/(org_id, so_no) + max(regexp)+retry ตามแบบ 25) + test/integration.docno.test.ts; seq เปลี่ยนเป็นนับต่อเดือนตาม prefix POYYYYMM/SOYYYYMM
 - P2-24: landing/pricing ถูกบังคับ dynamic เพราะ getAppContext อ่าน cookie — แยก `<AuthNavCta>` เป็น client component เพื่อ cache ได้
 - debt ผูกกับ sale ผ่าน note string — ควรเพิ่ม `debts.sale_id`
 - rate limit/held-bills เป็น in-memory ต่อ instance — ย้าย Redis เมื่อ scale

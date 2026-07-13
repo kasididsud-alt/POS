@@ -3,18 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
 async function requireOrg() {
   const ctx = await getAppContext();
   if (!ctx?.org) throw new Error("unauthorized");
-  return ctx.org.id;
+  return ctx;
 }
 
 export async function saveLot(formData: FormData): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    const ctx = await requireOrg();
+    // Lot & วันหมดอายุ = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    assertPlanAllows(ctx.subscription, "/lots");
+    const orgId = ctx.org!.id;
     const id = String(formData.get("id") ?? "").trim();
     const productId = String(formData.get("product_id") ?? "").trim();
     const lotNo = String(formData.get("lot_no") ?? "").trim() || null;
@@ -42,7 +46,8 @@ export async function saveLot(formData: FormData): Promise<Result> {
 
 export async function deleteLot(id: string): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดยังเก็บกวาดข้อมูลเดิมได้
+    const orgId = (await requireOrg()).org!.id;
     await query("delete from product_lots where id=$1 and org_id=$2", [id, orgId]);
     revalidatePath("/lots");
     return { ok: true };

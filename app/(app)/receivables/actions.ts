@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -17,6 +18,8 @@ async function requireOrg() {
 export async function addDebt(formData: FormData): Promise<Result> {
   try {
     const ctx = await requireOrg();
+    // ลูกหนี้/ขายเชื่อ = ฟีเจอร์แพ็ก Premium — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    assertPlanAllows(ctx.subscription, "/receivables");
     const customerId = String(formData.get("customer_id") ?? "").trim() || null;
     const amount = Number(formData.get("amount") ?? 0);
     const dueDate = String(formData.get("due_date") ?? "").trim() || null;
@@ -49,6 +52,8 @@ export async function recordPayment(
   amount: number,
 ): Promise<Result> {
   try {
+    // ไม่ gate แพ็กตรงรับชำระ — หนี้เดิม (สร้างตอนยังเป็น Premium) เป็นเงินจริงที่ลูกค้าทยอยจ่าย
+    // ร้านที่ดาวน์เกรดต้องบันทึกรับชำระ/ปิดหนี้ได้ (ตั้งหนี้ใหม่ถูก gate อยู่แล้ว)
     const ctx = await requireOrg();
     if (amount <= 0) return { ok: false, error: "ยอดชำระต้องมากกว่า 0" };
 
@@ -75,6 +80,7 @@ export async function recordPayment(
 
 export async function deleteDebt(id: string): Promise<Result> {
   try {
+    // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดยังเก็บกวาดข้อมูลเดิมได้
     const ctx = await requireOrg();
     await query("delete from debts where id=$1 and org_id=$2", [id, ctx.org!.id]);
     revalidatePath("/receivables");

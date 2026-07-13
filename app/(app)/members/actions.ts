@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
@@ -13,6 +14,8 @@ export async function adjustPoints(
   try {
     const ctx = await getAppContext();
     if (!ctx?.org) throw new Error("unauthorized");
+    // สมาชิก/แต้มสะสม = ฟีเจอร์แพ็ก Pro — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    assertPlanAllows(ctx.subscription, "/members");
     if (!Number.isFinite(delta) || delta === 0)
       return { ok: false, error: "ระบุจำนวนแต้ม" };
 

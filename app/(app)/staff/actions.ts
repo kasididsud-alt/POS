@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
-import { inviteUserToOrg } from "@/lib/limits";
+import { assertPlanAllows, inviteUserToOrg } from "@/lib/limits";
 import type { OrgContext } from "@/lib/guard";
 
 type Result = { ok: boolean; error?: string; message?: string };
@@ -19,6 +19,9 @@ async function requireOwner() {
 export async function inviteStaff(formData: FormData): Promise<Result> {
   try {
     const ctx = await requireOwner();
+    // พนักงาน & สิทธิ์ = ฟีเจอร์แพ็ก Pro — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    // gate เฉพาะการเพิ่มคน — เปลี่ยนบทบาท/ย้ายสาขา/ลบคนเดิมต้องทำได้หลังดาวน์เกรด
+    assertPlanAllows(ctx.subscription, "/staff");
     const email = String(formData.get("email") ?? "");
     const role = String(formData.get("role") ?? "cashier");
     if (!["owner", "cashier"].includes(role))

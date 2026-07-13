@@ -3,18 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
 
 async function requireOrg() {
   const ctx = await getAppContext();
   if (!ctx?.org) throw new Error("unauthorized");
-  return ctx.org.id;
+  return ctx;
 }
 
 export async function saveCustomer(formData: FormData): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    const ctx = await requireOrg();
+    // ลูกค้า (CRM) = ฟีเจอร์แพ็ก Pro — บังคับที่ action ด้วย (layout gate ทำงานแค่ตอน render)
+    assertPlanAllows(ctx.subscription, "/customers");
+    const orgId = ctx.org!.id;
     const id = String(formData.get("id") ?? "").trim();
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { ok: false, error: "กรุณากรอกชื่อลูกค้า" };
@@ -49,7 +53,8 @@ export async function saveCustomer(formData: FormData): Promise<Result> {
 
 export async function deleteCustomer(id: string): Promise<Result> {
   try {
-    const orgId = await requireOrg();
+    // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดยังเก็บกวาดข้อมูลเดิมได้
+    const orgId = (await requireOrg()).org!.id;
     await query("delete from customers where id=$1 and org_id=$2", [id, orgId]);
     revalidatePath("/customers");
     return { ok: true };
