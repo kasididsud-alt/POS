@@ -221,9 +221,20 @@ export default function ProductShowcase() {
                 </ul>
               </div>
 
-              <p className="mt-3 grid min-h-12 w-full place-items-center rounded-xl bg-[var(--green)] px-4 text-sm font-black text-white shadow-[0_14px_28px_-18px_rgba(8,127,96,0.8)]">
-                เก็บเงิน ฿175
-              </p>
+              <div
+                className="mt-3 rounded-xl border border-dashed border-[var(--green-d)] bg-[var(--lp-mint)]/15 px-4 py-3 text-center"
+                aria-labelledby="checkout-preview-label"
+              >
+                <span
+                  id="checkout-preview-label"
+                  className="block text-[10px] font-bold tracking-[0.08em] text-[var(--green-d)]"
+                >
+                  ตัวอย่างหน้าจอชำระเงิน
+                </span>
+                <strong className="lp-mono mt-1 block text-sm font-black text-[var(--lp-ink)]">
+                  เก็บเงิน ฿175
+                </strong>
+              </div>
             </aside>
 
             <div className="absolute bottom-4 left-4 flex items-center gap-3 rounded-2xl border border-[var(--lp-rule)] bg-white px-3.5 py-3 shadow-[0_18px_42px_-24px_rgba(7,24,47,0.48)] sm:left-5">

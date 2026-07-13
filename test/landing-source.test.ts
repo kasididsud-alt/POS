@@ -160,3 +160,23 @@ test("Product Showcase demo controls are static semantic content", async () => {
   assert.match(source, /<ul[^>]*aria-label="สินค้าขายดี"/);
   assert.match(source, /<ul[^>]*aria-label="วิธีชำระเงิน"/);
 });
+
+test("Product Showcase checkout affordance is clearly a preview", async () => {
+  const source = await read("components/landing/ProductShowcase.tsx");
+  const checkoutBlock =
+    source.match(
+      /<div\s+className="[^"]*"[^>]*aria-labelledby="checkout-preview-label"[^>]*>[\s\S]*?<\/div>/,
+    )?.[0] ??
+    source.match(
+      /<p className="[^"]*"[^>]*>\s*เก็บเงิน ฿175\s*<\/p>/,
+    )?.[0];
+  assert.ok(checkoutBlock, "checkout preview block must be auditable");
+  assert.doesNotMatch(
+    checkoutBlock,
+    /bg-\[var\(--green\)\]|text-white|shadow-/,
+  );
+  assert.match(checkoutBlock, /border-dashed/);
+  assert.match(checkoutBlock, /bg-\[var\(--lp-mint\)\]\/15/);
+  assert.match(checkoutBlock, /ตัวอย่างหน้าจอชำระเงิน/);
+  assert.match(checkoutBlock, /เก็บเงิน ฿175/);
+});
