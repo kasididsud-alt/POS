@@ -82,32 +82,65 @@ test("Hero responsive nav visibility survives homepage theme overrides", async (
     read("components/landing/Hero.tsx"),
     read("app/globals.css"),
   ]);
-  assert.match(
-    hero,
-    /href="#product" className="lp-nav-link hidden lg:inline-flex"/,
-  );
-  assert.match(
-    hero,
-    /href="\/pricing" className="lp-nav-link hidden md:inline-flex"/,
-  );
+  const navClassTokensForHref = (href: string) => {
+    const openingTag = [...hero.matchAll(/<(?:a|Link)\b[^>]*>/g)]
+      .map(([tag]) => tag)
+      .find((tag) => {
+        const tagHref = tag.match(/\bhref=(["'])(.*?)\1/)?.[2];
+        const className = tag.match(/\bclassName=(["'])(.*?)\1/)?.[2];
+        return tagHref === href && className?.split(/\s+/).includes("lp-nav-link");
+      });
+    assert.ok(openingTag, `Hero must render a nav link for ${href}`);
+    const className = openingTag.match(/\bclassName=(["'])(.*?)\1/)?.[2];
+    assert.ok(className, `${href} nav link must have a className`);
+    return new Set(className.split(/\s+/).filter(Boolean));
+  };
+  for (const [href, expectedTokens] of [
+    ["#product", ["lp-nav-link", "hidden", "lg:inline-flex"]],
+    ["/pricing", ["lp-nav-link", "hidden", "md:inline-flex"]],
+  ] as const) {
+    const classTokens = navClassTokensForHref(href);
+    for (const token of expectedTokens) {
+      assert.ok(classTokens.has(token), `${href} nav link must include ${token}`);
+    }
+  }
 
   const homeTheme = css.match(
     /\/\* BEGIN: lp-home theme \*\/([\s\S]*?)\/\* END: lp-home theme \*\//,
   )?.[1];
   assert.ok(homeTheme, "homepage theme must have an auditable scoped block");
 
-  const forcedResponsiveNavDisplay = [
-    ...homeTheme.matchAll(/([^{}]+)\{([^{}]*)\}/g),
-  ].filter(
-    ([, selectors, declarations]) =>
-      selectors.includes(".lp-home .lp-nav-link") &&
-      /\bdisplay:\s*inline-flex/.test(declarations) &&
-      !selectors.includes(".lp-nav-link:not(.hidden)"),
-  );
+  const parsedRules = (theme: string) =>
+    [...theme.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(
+      ([, selectorList, declarations]) =>
+        selectorList
+          .split(",")
+          .map((selector) => ({ selector: selector.trim(), declarations })),
+    );
+  const forcedResponsiveNavDisplay = (theme: string) =>
+    parsedRules(theme).filter(
+      ({ selector, declarations }) =>
+        selector.includes(".lp-home .lp-nav-link") &&
+        !selector.includes(".lp-home .lp-nav-link:not(.hidden)") &&
+        /\bdisplay\s*:/.test(declarations),
+    );
   assert.equal(
-    forcedResponsiveNavDisplay.length,
+    forcedResponsiveNavDisplay(homeTheme).length,
     0,
     "homepage CSS must not override Tailwind's responsive hidden nav links",
+  );
+  const injectedDisplayCounts = ["flex", "block", "inline-flex"].map(
+    (display) =>
+      forcedResponsiveNavDisplay(`${homeTheme}
+.lp-home .lp-nav-link:not(.hidden),
+.lp-home .lp-nav-link {
+  display: ${display};
+}`).length,
+  );
+  assert.deepEqual(
+    injectedDisplayCounts,
+    [1, 1, 1],
+    "each injected unguarded display rule must be rejected independently",
   );
   assert.match(
     homeTheme,
