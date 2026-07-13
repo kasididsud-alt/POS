@@ -180,3 +180,21 @@ test("Product Showcase checkout affordance is clearly a preview", async () => {
   assert.match(checkoutBlock, /ตัวอย่างหน้าจอชำระเงิน/);
   assert.match(checkoutBlock, /เก็บเงิน ฿175/);
 });
+
+test("landing sections expose the approved conversion sequence", async () => {
+  const source = await read("components/landing/LandingSections.tsx");
+  for (const exportName of [
+    "Outcomes",
+    "RetailWorkflow",
+    "FeatureGrid",
+    "StoreFit",
+    "LandingFaq",
+    "ClosingCta",
+    "LandingFooter",
+  ]) {
+    assert.match(source, new RegExp("export function " + exportName));
+  }
+  assert.match(source, /id="features"/);
+  assert.match(source, /<details/);
+  assert.match(source, /<summary/);
+});
