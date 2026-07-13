@@ -76,12 +76,25 @@ test("Homepage theme is isolated from shared public page primitives", async () =
   assert.doesNotMatch(homeTheme, /^\s*\.lp(?!-home\b|\.lp-home\b)/m);
 });
 
-test("Homepage transitions animate only transform or opacity", async () => {
+test("Homepage overrides shared card motion with safe transitions", async () => {
   const css = await read("app/globals.css");
   const homeTheme = css.match(
     /\/\* BEGIN: lp-home theme \*\/([\s\S]*?)\/\* END: lp-home theme \*\//,
   )?.[1];
   assert.ok(homeTheme, "homepage theme must have an auditable scoped block");
+  const homeCard = homeTheme.match(/\.lp-home \.lp-card\s*\{([^}]*)\}/)?.[1];
+  assert.ok(homeCard, "homepage card must override the shared .lp-card rule");
+  const cardTransition = homeCard.match(/\btransition\s*:\s*([^;]+)/)?.[1];
+  assert.ok(
+    cardTransition,
+    "homepage card must reset the shared paint-property transition",
+  );
+  const cardProperties = cardTransition
+    .split(",")
+    .map((item) => item.trim().split(/\s+/)[0])
+    .sort();
+  assert.deepEqual(cardProperties, ["opacity", "transform"]);
+
   const transitions = [
     ...homeTheme.matchAll(/transition(?:-property)?\s*:\s*([^;]+)/g),
   ];
