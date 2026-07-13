@@ -77,6 +77,44 @@ test("Hero stat cards stay clear of the tablet photo subject", async () => {
   );
 });
 
+test("Hero responsive nav visibility survives homepage theme overrides", async () => {
+  const [hero, css] = await Promise.all([
+    read("components/landing/Hero.tsx"),
+    read("app/globals.css"),
+  ]);
+  assert.match(
+    hero,
+    /href="#product" className="lp-nav-link hidden lg:inline-flex"/,
+  );
+  assert.match(
+    hero,
+    /href="\/pricing" className="lp-nav-link hidden md:inline-flex"/,
+  );
+
+  const homeTheme = css.match(
+    /\/\* BEGIN: lp-home theme \*\/([\s\S]*?)\/\* END: lp-home theme \*\//,
+  )?.[1];
+  assert.ok(homeTheme, "homepage theme must have an auditable scoped block");
+
+  const forcedResponsiveNavDisplay = [
+    ...homeTheme.matchAll(/([^{}]+)\{([^{}]*)\}/g),
+  ].filter(
+    ([, selectors, declarations]) =>
+      selectors.includes(".lp-home .lp-nav-link") &&
+      /\bdisplay:\s*inline-flex/.test(declarations) &&
+      !selectors.includes(".lp-nav-link:not(.hidden)"),
+  );
+  assert.equal(
+    forcedResponsiveNavDisplay.length,
+    0,
+    "homepage CSS must not override Tailwind's responsive hidden nav links",
+  );
+  assert.match(
+    homeTheme,
+    /\.lp-home \.lp-nav-link:not\(\.hidden\)\s*\{[^}]*display:\s*inline-flex/,
+  );
+});
+
 test("Homepage theme is isolated from shared public page primitives", async () => {
   const [css, plan] = await Promise.all([
     read("app/globals.css"),

@@ -406,8 +406,18 @@ body {
 .lp-home .lp-btn-outline-light,
 .lp-home .lp-btn-ghost,
 .lp-home .lp-header-cta,
-.lp-home .lp-nav-link {
+.lp-home .lp-nav-link:not(.hidden) {
   display: inline-flex;
+}
+
+.lp-home .lp-btn-primary,
+.lp-home .lp-btn-gold,
+.lp-home .lp-btn-solid,
+.lp-home .lp-btn-secondary,
+.lp-home .lp-btn-outline-light,
+.lp-home .lp-btn-ghost,
+.lp-home .lp-header-cta,
+.lp-home .lp-nav-link {
   min-height: 44px;
   align-items: center;
   justify-content: center;
