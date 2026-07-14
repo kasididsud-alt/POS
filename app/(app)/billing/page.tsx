@@ -30,6 +30,11 @@ export default async function PricingPage({
 
   const current = planForOrg(ctx.subscription);
   const isOwner = ctx.membership?.role === "owner";
+  // trial อยู่ → ส่งวันหมดไปให้ client บอกลูกค้าว่ากำลังทดลองแพ็กไหน หมดเมื่อไหร่
+  const trialEndsAt =
+    ctx.subscription?.status === "trialing" && ctx.subscription.trial_ends_at
+      ? new Date(ctx.subscription.trial_ends_at).toISOString()
+      : null;
   // รอบบิลปัจจุบัน — ให้ PricingClient ปิดปุ่มเฉพาะเมื่อ "แพ็ก+รอบบิล" ตรงกัน
   // (ลูกค้าที่อยู่ Pro รายเดือนต้องสลับเป็น Pro รายปีได้ ไม่ใช่โดนบล็อกว่า "แพ็กปัจจุบัน")
   const currentInterval = ctx.subscription?.price_id
@@ -42,6 +47,7 @@ export default async function PricingPage({
       paid={PAID_PLAN_IDS.map((id) => toClient(PLANS[id]))}
       current={current}
       currentInterval={currentInterval}
+      trialEndsAt={trialEndsAt}
       isOwner={isOwner}
       stripeReady={isStripeConfigured}
       banner={

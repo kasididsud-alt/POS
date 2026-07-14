@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 import { assertPlanAllows, assertRoleAtLeast } from "@/lib/limits";
+import { logAudit } from "@/lib/audit";
 
 type Result = { ok: boolean; error?: string };
 
@@ -30,6 +31,7 @@ export async function createPO(input: {
       input.note || null,
       ctx.userId,
     ]);
+    await logAudit(ctx.org.id, ctx.userId, "po.create", `${items.length} รายการ`);
     revalidatePath("/purchase-orders");
     return { ok: true };
   } catch (e) {
@@ -53,6 +55,7 @@ export async function receivePO(poId: string): Promise<Result> {
     if (!ctx.branchId) return { ok: false, error: "ยังไม่ได้กำหนดสาขา" };
 
     await query("select receive_po($1,$2,$3)", [poId, ctx.userId, ctx.branchId]);
+    await logAudit(ctx.org.id, ctx.userId, "po.receive", `PO ${poId}`);
     revalidatePath("/purchase-orders");
     revalidatePath("/stock");
     revalidatePath("/goods-receipt");
@@ -71,6 +74,7 @@ export async function cancelPO(poId: string): Promise<Result> {
       "update purchase_orders set status='cancelled' where id=$1 and org_id=$2 and status='ordered'",
       [poId, ctx.org.id],
     );
+    await logAudit(ctx.org.id, ctx.userId, "po.cancel", `PO ${poId}`);
     revalidatePath("/purchase-orders");
     return { ok: true };
   } catch (e) {

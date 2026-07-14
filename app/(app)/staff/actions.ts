@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 import { assertPlanAllows, inviteUserToOrg } from "@/lib/limits";
+import { logAudit } from "@/lib/audit";
 import type { OrgContext } from "@/lib/guard";
 
 type Result = { ok: boolean; error?: string; message?: string };
@@ -32,7 +33,10 @@ export async function inviteStaff(formData: FormData): Promise<Result> {
       email,
       role as "owner" | "manager" | "cashier",
     );
-    if (result.ok) revalidatePath("/staff");
+    if (result.ok) {
+      await logAudit(ctx.org!.id, ctx.userId, "staff.invite", `${email} (${role})`);
+      revalidatePath("/staff");
+    }
     return result;
   } catch (e) {
     return { ok: false, error: (e as Error).message };
@@ -55,6 +59,7 @@ export async function changeRole(
       ctx.org!.id,
       userId,
     ]);
+    await logAudit(ctx.org!.id, ctx.userId, "staff.role", `${userId} → ${role}`);
     revalidatePath("/staff");
     return { ok: true };
   } catch (e) {
@@ -74,6 +79,7 @@ export async function setStaffBranch(
       "update memberships set branch_id=$1 where org_id=$2 and user_id=$3",
       [branchId, ctx.org!.id, userId],
     );
+    await logAudit(ctx.org!.id, ctx.userId, "staff.branch", `${userId} → สาขา ${branchId}`);
     revalidatePath("/staff");
     return { ok: true };
   } catch (e) {
@@ -89,6 +95,7 @@ export async function removeStaff(userId: string): Promise<Result> {
       ctx.org!.id,
       userId,
     ]);
+    await logAudit(ctx.org!.id, ctx.userId, "staff.remove", userId);
     revalidatePath("/staff");
     return { ok: true };
   } catch (e) {

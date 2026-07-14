@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 
 // ส่งแค่ product_id + qty — ราคาคืนคิดจากราคาขายจริง (sale_items) ฝั่ง DB
 type ReturnLine = {
@@ -45,6 +46,12 @@ export async function processReturn(
         ctx.userId,
         ctx.branchId,
       ],
+    );
+    await logAudit(
+      ctx.org.id,
+      ctx.userId,
+      "sale.return",
+      `บิล ${input.sale_id} คืน ${items.length} รายการ${input.reason ? ` (${input.reason})` : ""}`,
     );
     revalidatePath("/returns");
     revalidatePath("/stock");

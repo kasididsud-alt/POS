@@ -20,6 +20,7 @@ export default function PricingClient({
   paid,
   current,
   currentInterval,
+  trialEndsAt,
   isOwner,
   stripeReady,
   banner,
@@ -31,6 +32,8 @@ export default function PricingClient({
   current: "free" | "pro" | "premium";
   /** รอบบิลของแพ็กปัจจุบัน (null = ไม่รู้ เช่น trial ที่ยังไม่มี price) */
   currentInterval: "monthly" | "yearly" | null;
+  /** วันหมดช่วงทดลองฟรี (ISO) — null = ไม่ได้อยู่ช่วงทดลอง */
+  trialEndsAt: string | null;
   isOwner: boolean;
   stripeReady: boolean;
   banner: "success" | "canceled" | "error" | "upgrade" | null;
@@ -40,12 +43,33 @@ export default function PricingClient({
   const [yearly, setYearly] = useState(false);
   const interval = yearly ? "yearly" : "monthly";
 
+  const trialing = trialEndsAt !== null;
+  const trialDaysLeft = trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86_400_000))
+    : null;
+  const currentName =
+    [free, ...paid].find((p) => p.id === current)?.name ?? current;
+
   return (
     <div className="mx-auto max-w-5xl">
       <h1 className="text-2xl font-bold">แพ็กเกจ &amp; ราคา</h1>
       <p className="mt-1 text-sm text-[var(--muted)]">
         เลือกแพ็กที่พอดีกับร้าน · อัปเกรด/ดาวน์เกรดเมื่อไหร่ก็ได้
       </p>
+
+      {trialing && (
+        <div className="mt-4 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
+          🎁 ร้านของคุณกำลัง<b>ทดลองใช้แพ็ก &ldquo;{currentName}&rdquo; ฟรี</b> ถึง{" "}
+          {new Date(trialEndsAt!).toLocaleDateString("th-TH", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })}
+          {trialDaysLeft !== null && ` (เหลืออีก ${trialDaysLeft} วัน)`}{" "}
+          — ใช้ได้ครบทุกฟีเจอร์ตามรายการของแพ็กนี้ด้านล่าง
+          หมดช่วงทดลองแล้วร้านจะกลับเป็นแพ็กฟรีอัตโนมัติ ไม่มีการเก็บเงิน
+        </div>
+      )}
 
       {banner === "upgrade" && (
         <div className="mt-4 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-800">
@@ -129,7 +153,7 @@ export default function PricingClient({
             >
               {isCurrentPlan && (
                 <span className="absolute right-4 top-4 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                  แพ็กปัจจุบัน
+                  {trialing ? "กำลังทดลองฟรี" : "แพ็กปัจจุบัน"}
                 </span>
               )}
 
@@ -163,7 +187,7 @@ export default function PricingClient({
                   </button>
                 ) : isCurrentExact ? (
                   <button className="btn-outline w-full" disabled>
-                    แพ็กปัจจุบัน
+                    {trialing ? "กำลังทดลองแพ็กนี้ฟรี" : "แพ็กปัจจุบัน"}
                   </button>
                 ) : (
                   <form action="/api/stripe/checkout" method="POST">
@@ -194,10 +218,10 @@ export default function PricingClient({
         <div>
           <h3 className="text-base font-bold">องค์กรใหญ่ / เชน</h3>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            สินค้าไม่จำกัด · API เชื่อมระบบ · สร้าง Role เอง · ผู้ดูแลเฉพาะ · SLA — ราคาตามขนาด
+            สินค้าไม่จำกัด · API เชื่อมระบบ · หลายสาขาไม่จำกัด · ผู้ดูแลเฉพาะ · SLA — ราคาตามขนาด
           </p>
         </div>
-        <Link href="/settings" className="btn-outline whitespace-nowrap">
+        <Link href="/contact" className="btn-outline whitespace-nowrap">
           ติดต่อเรา
         </Link>
       </div>

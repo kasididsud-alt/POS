@@ -23,6 +23,10 @@ export default function PlanEditor({
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<Msg | null>(null);
   const [days, setDays] = useState(14);
+  // ร่างระดับที่เลือกไว้ — มีผลจริงเมื่อกดบันทึกเท่านั้น (กันมือลั่น)
+  const [draftPlan, setDraftPlan] = useState<
+    "free" | "pro" | "premium" | "clear" | null
+  >(null);
 
   function run(action: () => Promise<{ ok: boolean; error?: string; message?: string }>) {
     setMsg(null);
@@ -41,6 +45,22 @@ export default function PlanEditor({
     { id: "pro", label: "Pro" },
     { id: "premium", label: "Premium" },
   ];
+
+  const planDirty = draftPlan !== null && draftPlan !== plan;
+
+  function togglePlan(p: "free" | "pro" | "premium" | "clear") {
+    setMsg(null);
+    setDraftPlan((cur) => (cur === p || p === plan ? null : p));
+  }
+
+  function savePlan() {
+    if (!planDirty || !draftPlan) return;
+    run(async () => {
+      const res = await setOrgPlan(orgId, draftPlan);
+      if (res.ok) setDraftPlan(null);
+      return res;
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -69,30 +89,72 @@ export default function PlanEditor({
       )}
 
       <div>
-        <div className="label">ตั้งแพ็กเกจ (comp — ไม่ผ่าน Stripe)</div>
+        <div className="label">ตั้งระดับแพ็กเกจ</div>
+        <p className="mb-2 text-xs text-[var(--muted)]">
+          Pro/Premium = แถมสิทธิ์ (comp — ไม่ผ่าน Stripe) · ฟรี =
+          ปรับร้านเป็นฟรีจริง (ตัด trial/comp)
+        </p>
         <div className="flex flex-wrap gap-2">
-          {PLANS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              disabled={pending}
-              onClick={() => run(() => setOrgPlan(orgId, p.id))}
-              className={`btn-outline ${
-                compPlan === p.id ? "ring-2 ring-[var(--primary)]/40" : ""
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+          {PLANS.map((p) => {
+            const isCurrent = plan === p.id;
+            const isDraft = draftPlan === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                disabled={pending}
+                onClick={() => togglePlan(p.id)}
+                className={`btn-outline ${
+                  isCurrent
+                    ? "bg-[var(--primary)] text-white hover:bg-[var(--primary)]"
+                    : isDraft
+                      ? "bg-indigo-50 text-[var(--primary)] ring-2 ring-[var(--primary)]"
+                      : ""
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
           <button
             type="button"
             disabled={pending || !compPlan}
-            onClick={() => run(() => setOrgPlan(orgId, "clear"))}
-            className="btn-ghost text-[var(--muted)]"
+            onClick={() => togglePlan("clear")}
+            className={`btn-ghost ${
+              draftPlan === "clear"
+                ? "bg-indigo-50 text-[var(--primary)] ring-2 ring-[var(--primary)]"
+                : "text-[var(--muted)]"
+            }`}
           >
             ยกเลิก comp
           </button>
         </div>
+        {planDirty && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={savePlan}
+              className="btn-primary"
+            >
+              {pending ? "กำลังบันทึก…" : "บันทึกระดับแพ็กเกจ"}
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => setDraftPlan(null)}
+              className="btn-ghost text-[var(--muted)]"
+            >
+              ยกเลิก
+            </button>
+            <span className="text-xs text-amber-700">
+              ยังไม่บันทึก — จะ
+              {draftPlan === "clear"
+                ? "ยกเลิก comp (กลับไปคิดตามจริง)"
+                : `เปลี่ยนระดับเป็น ${draftPlan?.toUpperCase()}`}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="border-t border-[var(--border)] pt-4">

@@ -4,12 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3020",
+    "dev:all": "node scripts/dev-all.mjs",
     "db": "node scripts/db.mjs",
     "migrate": "node scripts/migrate.mjs",
     "build": "next build",
     "start": "next start -p 3020",
     "lint": "eslint",
-    "test": "node --test --experimental-strip-types test/*.test.ts"
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "help:shots": "node scripts/help-shots.mjs"
   },
   "dependencies": {
     "@stripe/stripe-js": "^9.8.0",
@@ -37,6 +39,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "puppeteer-core": "^25.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

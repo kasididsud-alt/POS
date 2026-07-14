@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getAdminOrgs } from "@/lib/admin-queries";
 import { formatTHB, formatDate } from "@/lib/format";
 import PlanBadge from "@/components/admin/PlanBadge";
+import OrgQuickManage from "@/components/admin/OrgQuickManage";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,9 @@ export default async function AdminOrgsPage({
                 <th className="px-4 py-3 text-right font-medium">บิล</th>
                 <th className="px-4 py-3 text-right font-medium">ยอดขาย</th>
                 <th className="px-4 py-3 font-medium">สมัครเมื่อ</th>
+                <th className="px-4 py-3 font-medium">
+                  เปลี่ยนแพ็กเกจ / เพิ่มวัน
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -84,12 +88,19 @@ export default async function AdminOrgsPage({
                   <td className="px-4 py-3 text-[var(--muted)]">
                     {formatDate(o.created_at)}
                   </td>
+                  <td className="px-4 py-3">
+                    <OrgQuickManage
+                      orgId={o.id}
+                      plan={o.plan}
+                      compPlan={o.comp_plan}
+                    />
+                  </td>
                 </tr>
               ))}
               {orgs.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-4 py-8 text-center text-[var(--muted)]"
                   >
                     ไม่พบร้านค้า

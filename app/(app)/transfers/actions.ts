@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 import { assertPlanAllows, assertRoleAtLeast } from "@/lib/limits";
+import { logAudit } from "@/lib/audit";
 
 type Result = { ok: boolean; error?: string };
 type TLine = { product_id: string; name: string; qty: number };
@@ -52,6 +53,12 @@ export async function createTransfer(input: {
       input.note || null,
       ctx.userId,
     ]);
+    await logAudit(
+      ctx.org.id,
+      ctx.userId,
+      "transfer.create",
+      `${items.length} รายการ ${input.from_branch_id} → ${input.to_branch_id}`,
+    );
     revalidatePath("/transfers");
     return { ok: true };
   } catch (e) {
@@ -82,6 +89,7 @@ export async function setTransferStatus(
     } else {
       await query("select cancel_transfer($1,$2)", [id, ctx.userId]);
     }
+    await logAudit(ctx.org.id, ctx.userId, `transfer.${status}`, `ใบโอน ${id}`);
     revalidatePath("/transfers");
     revalidatePath("/stock");
     return { ok: true };

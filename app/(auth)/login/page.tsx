@@ -23,7 +23,7 @@ export default async function LoginPage({
   return (
     <div>
       <h1 className="text-2xl font-bold tracking-tight">เข้าสู่ระบบ</h1>
-      <p className="mt-1 text-sm text-[var(--muted)]">ยินดีต้อนรับกลับมา 👋</p>
+      <p className="mt-1 text-sm text-[var(--muted)]">ยินดีต้อนรับกลับมา</p>
 
       {sp.error && (
         <div className="mt-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

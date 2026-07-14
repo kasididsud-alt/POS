@@ -1,87 +1,56 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { authenticateApiKey } from "@/lib/api-keys";
 import { query, one } from "@/lib/db";
-import { planForOrg, PLANS } from "@/lib/plans";
-import { rateLimit } from "@/lib/rate-limit";
-import type { Subscription } from "@/lib/types";
-
-// เพดานคำขอต่อ IP/นาที ที่บังคับ "ก่อน" ยืนยันตัวตน — backstop สำหรับ request ที่
-// key ผิด/ไม่มี key (401) ซึ่งไม่มี org ให้ผูก per-key limit ได้ กัน DB โดน flood
-// ตั้งไว้ ≥ เพดานแพ็กสูงสุด (Premium) เพื่อไม่รบกวน client ที่ยิงถี่ด้วย key ถูกต้อง
-const API_IP_RPM = 2000;
-
-// req.ip / req.geo ถูกถอดออกตั้งแต่ Next v15 → ดึง IP จาก header ของ reverse proxy
-// (ค่านี้ spoof ได้ ถ้าไม่มี proxy ที่ตั้ง x-forwarded-for ให้น่าเชื่อถือ ควรใช้ IP ระดับ platform)
-function clientIp(req: NextRequest): string {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip")?.trim() || "unknown";
-}
-
-function rateLimited(rpm: number, resetAt: number, msg: string): NextResponse {
-  return NextResponse.json(
-    { error: "rate_limited", message: msg },
-    {
-      status: 429,
-      headers: {
-        "Retry-After": String(Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))),
-      },
-    },
-  );
-}
+import { authenticateV1, pageParams } from "../_lib";
 
 // GET /api/v1/products — รายการสินค้า + สต็อกรวมทุกสาขา (ยืนยันด้วย API key)
 // Header: Authorization: Bearer kds_live_xxx
+// Query: limit (1-500, default 100) · offset · q (ค้นหาชื่อ/sku/บาร์โค้ด)
 export async function GET(req: NextRequest) {
-  // ชั้นแรก: จำกัดตาม IP ก่อน authenticate — throttle traffic ที่ key ผิด/ไม่มี key
-  // ไม่ให้ยิง DB lookup (api_keys/organizations) แบบไม่มีเพดาน
-  const ipRl = rateLimit(`api-ip:${clientIp(req)}`, API_IP_RPM);
-  if (!ipRl.ok) {
-    return rateLimited(API_IP_RPM, ipRl.resetAt, `เกินลิมิต ${API_IP_RPM} คำขอ/นาที`);
-  }
+  const auth = await authenticateV1(req);
+  if (auth.response) return auth.response;
+  const org = auth.org;
 
-  const org = await authenticateApiKey(req.headers.get("authorization"));
-  if (!org) {
-    return NextResponse.json(
-      { error: "unauthorized", message: "API key ไม่ถูกต้องหรือถูกยกเลิก" },
-      { status: 401 },
-    );
-  }
+  const { limit, offset } = pageParams(req);
+  const q = (req.nextUrl.searchParams.get("q") ?? "").trim();
 
-  // จำกัดอัตราตามแพ็กของร้าน (Free 120 / Pro 600 / Premium 2000 req/นาที)
-  const sub = await one<Subscription>(
-    "select * from subscriptions where org_id=$1",
-    [org.id],
-  );
-  const rpm = PLANS[planForOrg(sub)].limits.rpm;
-  const rl = rateLimit(`api:${org.id}`, rpm);
-  if (!rl.ok) {
-    return rateLimited(rpm, rl.resetAt, `เกินลิมิต ${rpm} คำขอ/นาที`);
-  }
+  // เงื่อนไขค้นหาใช้เลข placeholder ต่างกันระหว่าง query list ($4/$5) กับ count ($2/$3)
+  const listCond = q ? "and (p.name ilike $4 or p.sku ilike $4 or p.barcode = $5)" : "";
+  const countCond = q ? "and (p.name ilike $2 or p.sku ilike $2 or p.barcode = $3)" : "";
 
-  const products = await query<{
-    id: string;
-    name: string;
-    sku: string | null;
-    barcode: string | null;
-    price: string;
-    cost: string;
-    unit: string;
-    qty: number;
-  }>(
-    `select p.id, p.name, p.sku, p.barcode, p.price, p.cost, p.unit,
-            coalesce(sum(sm.qty_change),0)::int as qty
-       from products p
-       left join stock_movements sm on sm.product_id = p.id
-      where p.org_id = $1 and p.is_active = true
-      group by p.id
-      order by p.name`,
-    [org.id],
-  );
+  const [products, totalRow] = await Promise.all([
+    query<{
+      id: string;
+      name: string;
+      sku: string | null;
+      barcode: string | null;
+      price: string;
+      cost: string;
+      unit: string;
+      qty: number;
+    }>(
+      `select p.id, p.name, p.sku, p.barcode, p.price, p.cost, p.unit,
+              coalesce(sum(sm.qty_change),0)::int as qty
+         from products p
+         left join stock_movements sm on sm.product_id = p.id
+        where p.org_id = $1 and p.is_active = true ${listCond}
+        group by p.id
+        order by p.name
+        limit $2 offset $3`,
+      q ? [org.id, limit, offset, `%${q}%`, q] : [org.id, limit, offset],
+    ),
+    one<{ n: number }>(
+      `select count(*)::int as n from products p
+        where p.org_id = $1 and p.is_active = true ${countCond}`,
+      q ? [org.id, `%${q}%`, q] : [org.id],
+    ),
+  ]);
 
+  const total = totalRow?.n ?? products.length;
   return NextResponse.json({
     org: { id: org.id, name: org.name },
+    total,
     count: products.length,
+    next_offset: offset + products.length < total ? offset + products.length : null,
     products: products.map((p) => ({
       ...p,
       price: Number(p.price),

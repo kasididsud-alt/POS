@@ -32,3 +32,36 @@ export async function one<T = Record<string, unknown>>(
   const rows = await query<T>(text, params);
   return rows[0] ?? null;
 }
+
+/** query helpers ที่ผูกกับ connection เดียว — ใช้ภายใน withTx */
+export type Tx = {
+  query: <T = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<T[]>;
+  one: <T = Record<string, unknown>>(text: string, params?: unknown[]) => Promise<T | null>;
+};
+
+/**
+ * รัน fn ใน transaction เดียว (connection เดียวตลอด) แล้ว commit/rollback ให้
+ * — จำเป็นกับงาน lock+check+insert (เช่นโควตาตามแพ็ก) ที่ต้อง atomic
+ *   pg_advisory_xact_lock จะถูกปล่อยเองตอนจบ transaction
+ */
+export async function withTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    const q = async <R,>(text: string, params?: unknown[]) =>
+      (await client.query(text, params as unknown[])).rows as R[];
+    const result = await fn({
+      query: q,
+      one: async (text, params) => (await q(text, params))[0] ?? null,
+    } as Tx);
+    await client.query("commit");
+    return result;
+  } catch (e) {
+    await client.query("rollback").catch(() => {
+      /* connection พังไปแล้ว — pool จะทิ้ง client เอง */
+    });
+    throw e;
+  } finally {
+    client.release();
+  }
+}

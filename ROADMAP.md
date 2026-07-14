@@ -14,14 +14,15 @@
 - SEO: canonical ต่อหน้า, robots block /admin+app routes, JSON-LD (SoftwareApplication/Offer/FAQPage), OG ภาษาไทย, sitemap /pricing+terms+privacy
 
 ### ค้างไว้เป็น backlog (จาก audit — ยังไม่วิกฤต)
-- P2-6: product/user limit เป็น check-then-insert (race เกินโควตาได้เล็กน้อยตอน concurrent) — แก้ด้วย advisory lock หรือ insert...where count<max
+- ~~P2-6: product/user limit เป็น check-then-insert~~ — ✅ เสร็จ 2026-07-14: `withTx` + `pg_advisory_xact_lock(hashtext(org), ns)` ครอบ check+insert ทั้ง saveProduct (ns=1) และ inviteUserToOrg (ns=2) + test/integration.quota-race.test.ts
 - ~~P1-4 ส่วนที่เหลือ: plan gating~~ — ✅ เสร็จ 2026-07-13: `assertPlanAllows` ครบ 12 โมดูล (รวม pro-tier: customers/members/sales-orders/staff ที่ ROADMAP เดิมตกสำรวจ) + test/plan-gating.test.ts ~60 เทสต์; action ฝั่ง "ปิดงานเก่า/ลดข้อมูล" (receivePO, setTransferStatus, recordPayment, delete*) จงใจไม่ gate เพื่อไม่ให้ร้านดาวน์เกรดมีสต็อก/หนี้ค้าง (มี comment ในโค้ด)
 - ~~`po_no`/`so_no` ยังใช้ count(*)+1~~ — ✅ เสร็จ 2026-07-13: migration 28 (dedup เก่า + unique (org_id, po_no)/(org_id, so_no) + max(regexp)+retry ตามแบบ 25) + test/integration.docno.test.ts; seq เปลี่ยนเป็นนับต่อเดือนตาม prefix POYYYYMM/SOYYYYMM
-- P2-24: landing/pricing ถูกบังคับ dynamic เพราะ getAppContext อ่าน cookie — แยก `<AuthNavCta>` เป็น client component เพื่อ cache ได้
-- debt ผูกกับ sale ผ่าน note string — ควรเพิ่ม `debts.sale_id`
+- ~~P2-24: landing/pricing ถูกบังคับ dynamic~~ — ✅ เสร็จ 2026-07-14: แยก `<AuthNavCta>/<AuthPrimaryCta>` (components/landing/AuthCta.tsx, ถาม /api/auth/me หลัง mount) — `/` และ `/pricing` เป็น ○ Static ใน next build แล้ว
+- ~~debt ผูกกับ sale ผ่าน note string~~ — ✅ เสร็จ 2026-07-14: migration 31 เพิ่ม `debts.sale_id` + backfill + checkout_sale ใส่ให้ทุกบิลเชื่อใหม่ (note คงรูปแบบเดิม — process_return ยังใช้จับคู่)
+- ✅ 2026-07-14 เพิ่มเติม: แต้มสะสมรายงานตรงความจริง (checkout_sale คืน points=0 เมื่อไม่มีลูกค้า, mig 31), env guard ก่อน boot production (`instrumentation.ts` — บล็อก DEV_PLAN/SITE_URL/COOKIE_SECURE ผิด), test suite → 214 เทสต์
 - rate limit/held-bills เป็น in-memory ต่อ instance — ย้าย Redis เมื่อ scale
 - ~~นโยบายสิทธิ์ cashier~~ — ✅ เสร็จ 2026-07-13: เพิ่ม role "ผู้จัดการ" (migration 29) เป็น 3 ระดับ cashier < manager < owner; MIN_ROLE_FOR_PATH ใน nav.ts (จัดซื้อ/ซัพพลายเออร์/โปรโมชั่น = manager+, เงิน/กำไร/ภาษี/ทีมงาน/ตั้งค่า = owner) + assertRoleAtLeast ราย action (แก้ราคา/ลบ/ปรับยอด/แต้ม/ตัดจ่าย/ใบโอน/ออเดอร์ = manager+) + test/role-gating.test.ts
-- (จากรอบเช็ค role 2026-07-13) pricing โฆษณา "สิทธิ์ละเอียด + audit log" (Premium) และ "สร้าง Role เอง" (Enterprise) — ตอนนี้มี 3 role แล้วจึงพอเรียก "แยกสิทธิ์" ได้ แต่ "สร้าง Role เอง" (custom RBAC) ยังไม่มีจริง + audit log ยังมี event น้อย — ถอดข้อความหรือสร้างจริง (แบบเดียวกับเคส FEFO)
+- ~~pricing โฆษณา "สร้าง Role เอง" + audit log event น้อย~~ — ✅ เสร็จ 2026-07-14: ถอดคำว่า "สร้าง Role เอง" ออกจากทุกหน้า (แทนด้วยของที่มีจริง) + audit log ครอบ ~35 action แล้ว (ขาย/คืน/โอน/รับเข้า/เบิก/PO/SO/กะ/หนี้/พนักงาน/สาขา/โปร/integrations)
 
 ## กติกาการทำงาน (ใช้ทุกเฟส)
 
@@ -67,16 +68,24 @@
 
 ## Phase 3 — ประสิทธิภาพ + ความน่าเชื่อถือ (ทยอยหลัง launch)
 
-- [ ] **Pagination หน้าสินค้า + แยกรูปออกจาก list query** (M) — base64 ใน list ทำหน้าอืดที่ 5k รายการ (ร้าน Premium เจอก่อนใคร)
-- [ ] **Audit log ครอบ action สำคัญ** (M) — checkout, return, transfer, staff, billing (ตอนนี้มีจริง 2 event แต่ขายเป็นฟีเจอร์ Premium)
-- [ ] **SO fulfill ตัดสต็อกจริง** (M) — ปิด loop ขายส่ง
+- [x] **Pagination หน้าสินค้า + แยกรูปออกจาก list query** — ✅ 2026-07-14: list ส่ง `has_image` แทน base64 + `/api/products/[id]/image` (ETag cache) + `getProductsPage` ค้นหา/แบ่งหน้าฝั่ง DB (50/หน้า) + ฟอร์มแก้ไขใช้ sentinel `__keep__` กันรูปหายตอนเซฟ
+- [x] **Audit log ครอบ action สำคัญ** — ✅ 2026-07-14: logAudit ครอบ checkout (ผ่าน after() ไม่หน่วง POS), return, transfer, goods-receipt, stock-issue, PO, SO (+SMS), shifts, debts, staff, branches, promotions (+broadcast), integrations connect/disconnect, api keys + ACTION_LABEL ครบใน /audit
+- [x] **SO fulfill ตัดสต็อกจริง** — ✅ 2026-07-14: RPC `fulfill_sales_order` (mig 31, atomic claim กันกดซ้ำ, เช็คของพอทั้งใบก่อนตัด) + ปุ่ม "ส่งมอบ + ตัดสต็อก" + setSOStatus ห้ามเซ็ต fulfilled ตรง/ห้ามย้อนสถานะ + 5 integration tests
 
 ## Phase 4 — ของใหม่ (เมื่อมี demand จริง)
 
 - [ ] **FEFO**: ถอดคำว่า "FEFO" ออกจากหน้า pricing ก่อน (S) → ค่อยสร้างจริงโดยผูก lot กับ stock_movements (L)
-- [ ] **ขยาย /api/v1** — pagination, stock endpoint, POST, เอกสาร API (ก่อนขาย Enterprise จริงจัง)
+- [~] **ขยาย /api/v1** — ✅ 2026-07-14: pagination (limit/offset/next_offset) + ค้นหา q ใน /products, endpoint ใหม่ GET /api/v1/stock (ต่อสาขา + low_stock filter), เอกสาร API ย่อในหน้า /integrations, refactor ด่านหน้า (auth+rate limit) เป็น app/api/v1/_lib.ts — เหลือ: POST endpoints (รอ use case Enterprise จริง)
 - [ ] **Enterprise multi-org/RBAC** — รอลูกค้า Enterprise รายแรกค่อยทำ
 - [ ] **Rate limit ย้าย Redis** — เมื่อ scale เกิน 1 instance เท่านั้น
+
+## Backlog ใหม่ (รอบ integrations 2026-07-14)
+
+- **Webhook รับ event "จ่ายแล้ว" จาก Omise/Stripe** — ให้ลิงก์จ่ายเงิน SO เปลี่ยนสถานะเอง (ต้องมี URL สาธารณะ + ตรวจลายเซ็น/ยิงถามซ้ำ + idempotent) — POS ไม่ต้องรอ อันนั้นใช้ polling แล้ว
+- **LINE รายลูกค้า** — webhook ผูก userId ลูกค้า (พิมพ์เบอร์ในแชท) → ส่งใบเสร็จ/แต้มรายคน
+- **LINE แจ้งสรุปปิดกะ / ลูกหนี้ครบกำหนด** — ต่อยอดจากแจ้งของใกล้หมด
+- **SMS อัตโนมัติตอนสถานะ SO เปลี่ยน + template แก้ข้อความเอง** — ตอนนี้กดส่งเองต่อครั้ง
+- **Shopee/Lazada/TikTok/Flash/Kerry/FlowAccount** — ติดบัญชีพาร์ทเนอร์/สัญญา ต้องสมัครก่อนถึงเริ่มได้
 
 ## ข้อควรระวังตอน deploy
 

@@ -184,7 +184,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/staff", label: "พนักงาน & สิทธิ์", icon: "👥" },
       { href: "/audit", label: "บันทึกการใช้งาน", icon: "📜" },
       { href: "/integrations", label: "การเชื่อมต่อ", icon: "🔌" },
+      { href: "/contact", label: "ติดต่อทีมงาน", icon: "💬" },
     ],
+  },
+  {
+    title: "ช่วยเหลือ",
+    items: [{ href: "/help", label: "วิธีใช้งาน", icon: "📖" }],
   },
 ];
 

@@ -9,7 +9,7 @@ export default async function PosPage() {
   if (!ctx?.org) redirect("/onboarding");
   const orgId = ctx.org.id;
 
-  const [products, customers, promotions] = await Promise.all([
+  const [products, customers, promotions, gateway] = await Promise.all([
     getProductsWithStock(orgId, ctx.branchId, { activeOnly: true }),
     query<PosCustomer>(
       "select id, name, phone, points from customers where org_id=$1 order by name",
@@ -23,6 +23,8 @@ export default async function PosPage() {
           and (ends_at is null or ends_at >= now()::date)`,
       [orgId],
     ),
+    // เชื่อม Omise/Stripe แล้วหรือยัง — ใช้เปิดตัวเลือก "QR เช็คเงินอัตโนมัติ" ใน modal พร้อมเพย์
+    query("select 1 from payment_gateway_settings where org_id=$1", [orgId]),
   ]);
 
   return (
@@ -33,6 +35,7 @@ export default async function PosPage() {
       promotions={promotions}
       orgId={orgId}
       branchId={ctx.branchId}
+      gatewayConnected={gateway.length > 0}
     />
   );
 }

@@ -6,7 +6,13 @@ import Modal from "@/components/Modal";
 import { formatTHB, formatDateTime } from "@/lib/format";
 import type { Customer } from "@/lib/types";
 import type { SORow } from "./page";
-import { createSalesOrder, setSOStatus } from "./actions";
+import {
+  createSalesOrder,
+  createSOPaymentLink,
+  fulfillSalesOrder,
+  sendSOStatusSms,
+  setSOStatus,
+} from "./actions";
 
 type ProductLite = { id: string; name: string; price: number };
 type Line = { product_id: string; qty: number; unit_price: number };
@@ -22,10 +28,14 @@ export default function SOClient({
   products,
   customers,
   orders,
+  gatewayConnected,
+  smsConnected,
 }: {
   products: ProductLite[];
   customers: Customer[];
   orders: SORow[];
+  gatewayConnected: boolean;
+  smsConnected: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -34,6 +44,9 @@ export default function SOClient({
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<Line[]>([{ product_id: "", qty: 1, unit_price: 0 }]);
   const [error, setError] = useState<string | null>(null);
+  const [payLink, setPayLink] = useState<{ so_no: string; url: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [smsSent, setSmsSent] = useState<string | null>(null);
 
   const total = lines.reduce((s, l) => s + l.qty * l.unit_price, 0);
 
@@ -98,6 +111,11 @@ export default function SOClient({
           {error}
         </div>
       )}
+      {smsSent && (
+        <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+          ✅ ส่ง SMS แจ้งสถานะ &ldquo;{smsSent}&rdquo; ถึงลูกค้าแล้ว
+        </div>
+      )}
 
       <div className="card mt-4 overflow-x-auto">
         <table className="w-full text-sm">
@@ -138,14 +156,61 @@ export default function SOClient({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
+                    {smsConnected && o.customer_name && o.status !== "cancelled" && (
+                      <button
+                        disabled={pending}
+                        onClick={() => {
+                          setSmsSent(null);
+                          if (confirm(`ส่ง SMS แจ้งสถานะ "${o.so_no}" ถึงลูกค้า? (มีค่าส่งตามผู้ให้บริการ)`))
+                            run(() => sendSOStatusSms(o.id), () => setSmsSent(o.so_no));
+                        }}
+                        className="btn-ghost mr-1 px-2 py-1 text-xs text-sky-700"
+                        title="ส่ง SMS แจ้งสถานะออเดอร์ไปที่เบอร์ลูกค้า"
+                      >
+                        📩 SMS แจ้งลูกค้า
+                      </button>
+                    )}
+                    {gatewayConnected && o.status !== "cancelled" && (
+                      <button
+                        disabled={pending}
+                        onClick={() => {
+                          setError(null);
+                          start(async () => {
+                            const res = await createSOPaymentLink(o.id);
+                            if (!res.ok || !res.url)
+                              setError(res.error ?? "สร้างลิงก์ไม่สำเร็จ");
+                            else {
+                              setCopied(false);
+                              setPayLink({ so_no: o.so_no, url: res.url });
+                            }
+                          });
+                        }}
+                        className="btn-ghost mr-1 px-2 py-1 text-xs text-emerald-700"
+                        title="สร้างลิงก์ให้ลูกค้าจ่ายด้วยบัตร/e-wallet"
+                      >
+                        💳 ลิงก์จ่ายเงิน
+                      </button>
+                    )}
                     {st.next && (
-                      <div className="flex justify-end gap-1">
+                      <div className="inline-flex justify-end gap-1">
                         <button
-                          onClick={() => run(() => setSOStatus(o.id, st.next!))}
+                          onClick={() =>
+                            run(() =>
+                              // "ส่งมอบ" ตัดสต็อกจริง — แยก action จากการเปลี่ยนสถานะทั่วไป
+                              st.next === "fulfilled"
+                                ? fulfillSalesOrder(o.id)
+                                : setSOStatus(o.id, st.next!),
+                            )
+                          }
                           disabled={pending}
                           className="btn-primary px-2 py-1 text-xs"
+                          title={
+                            st.next === "fulfilled"
+                              ? "ตัดสต็อกจากสาขาปัจจุบันตามรายการในออเดอร์"
+                              : undefined
+                          }
                         >
-                          {st.nextLabel}
+                          {st.next === "fulfilled" ? "ส่งมอบ + ตัดสต็อก" : st.nextLabel}
                         </button>
                         <button
                           onClick={() => run(() => setSOStatus(o.id, "cancelled"))}
@@ -162,6 +227,46 @@ export default function SOClient({
           </tbody>
         </table>
       </div>
+
+      <Modal
+        open={payLink !== null}
+        onClose={() => setPayLink(null)}
+        title={`ลิงก์จ่ายเงิน — ${payLink?.so_no ?? ""}`}
+      >
+        {payLink && (
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--muted)]">
+              ส่งลิงก์นี้ให้ลูกค้า (LINE/แชท) — จ่ายได้ด้วยบัตรเครดิต/e-wallet
+              เงินเข้าบัญชี gateway ของร้านโดยตรง เงินเข้าแล้วค่อยมากดยืนยันออเดอร์
+            </p>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={payLink.url}
+                className="input flex-1 font-mono text-xs"
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <button
+                onClick={async () => {
+                  await navigator.clipboard.writeText(payLink.url);
+                  setCopied(true);
+                }}
+                className="btn-primary whitespace-nowrap px-3 py-1.5 text-sm"
+              >
+                {copied ? "คัดลอกแล้ว ✓" : "คัดลอก"}
+              </button>
+            </div>
+            <a
+              href={payLink.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-block text-sm text-[var(--primary)] underline"
+            >
+              เปิดดูหน้าจ่ายเงิน →
+            </a>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={showForm} onClose={() => setShowForm(false)} title="สร้างออเดอร์ขายส่ง">
         <div className="space-y-3">

@@ -138,6 +138,7 @@ export type AdminOrgRow = {
   plan: PlanId;
   status: string | null;
   comp_plan: string | null;
+  trial_ends_at: string | null;
 };
 
 /** รายชื่อร้านทั้งหมด (ค้นด้วยชื่อได้) */
@@ -175,6 +176,7 @@ export async function getAdminOrgs(q?: string): Promise<AdminOrgRow[]> {
     revenue: r.revenue,
     status: r.status,
     comp_plan: r.comp_plan,
+    trial_ends_at: r.trial_ends_at,
     plan: r.status
       ? derivePlan({
           status: r.status as Subscription["status"],

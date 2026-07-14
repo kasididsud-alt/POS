@@ -5,8 +5,24 @@ import { useRouter } from "next/navigation";
 import Modal from "@/components/Modal";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import { formatTHB } from "@/lib/format";
+import {
+  forgetDrawer,
+  isDrawerSupported,
+  kickDrawer,
+  reconnectDrawer,
+  requestDrawerPort,
+} from "@/lib/cash-drawer";
 import type { CartLine, ProductWithStock } from "@/lib/types";
-import { checkoutAction, getPromptPayQRAction } from "./actions";
+import {
+  checkGatewayChargeAction,
+  checkoutAction,
+  createGatewayQRAction,
+  getPromptPayQRAction,
+  pairDisplayAction,
+  pushDisplayStateAction,
+  unpairDisplayAction,
+  type DisplayState,
+} from "./actions";
 
 // ปัดเงินให้เหลือ 2 ตำแหน่ง (สตางค์) กัน float ทศนิยมเพี้ยนตอนส่งให้ server
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -28,6 +44,7 @@ export default function PosClient({
   promotions,
   orgId,
   branchId,
+  gatewayConnected,
 }: {
   products: ProductWithStock[];
   hasPromptPay: boolean;
@@ -35,6 +52,7 @@ export default function PosClient({
   promotions: PosPromotion[];
   orgId: string;
   branchId: string | null;
+  gatewayConnected: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -47,10 +65,16 @@ export default function PosClient({
   const [payMode, setPayMode] = useState<null | "cash" | "promptpay" | "credit">(null);
   const [cashReceived, setCashReceived] = useState("");
   const [qr, setQr] = useState<string | null>(null);
+  // พร้อมเพย์ 2 โหมด: null = ยังไม่เลือก (จอลูกค้ายังไม่เห็น QR) /
+  // "direct" = QR เบอร์ร้าน (ฟรี ยืนยันเอง) / "gateway" = QR จาก Omise/Stripe (เช็คเงินเข้าเอง)
+  const [qrMode, setQrMode] = useState<null | "direct" | "gateway">(null);
+  const [gwCharge, setGwCharge] = useState<{ chargeId: string } | null>(null);
+  const [gwLoading, setGwLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanMsg, setScanMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{
+    sale_id: string;
     bill_no: string;
     total: number;
     change: number;
@@ -58,6 +82,76 @@ export default function PosClient({
     points: number;
   } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // พิมพ์ใบเสร็จจากหน้าขาย — ฝังหน้าใบเสร็จใน iframe ซ่อนไว้ให้เด้ง print dialog
+  // โดยไม่ต้องออกจากหน้า POS (ตั้งค่ากระดาษ/โหมดอัตโนมัติจำไว้ในเครื่อง)
+  const [paper, setPaper] = useState<"80" | "58">("80");
+  const [autoPrint, setAutoPrint] = useState(false);
+  const [printJob, setPrintJob] = useState<{ src: string; nonce: number } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const p = localStorage.getItem("pos_paper");
+    if (p === "58" || p === "80") setPaper(p);
+    setAutoPrint(localStorage.getItem("pos_auto_print") === "1");
+  }, []);
+
+  function printReceipt(saleId: string, p: "80" | "58") {
+    // nonce บังคับ remount iframe — กดพิมพ์ซ้ำบิลเดิมได้
+    setPrintJob((j) => ({
+      src: `/sales/${saleId}?print=${p}`,
+      nonce: (j?.nonce ?? 0) + 1,
+    }));
+  }
+
+  // ---------- ลิ้นชักเก็บเงิน ----------
+  // ต่อผ่านเครื่องพิมพ์สลิปด้วย Web Serial (ดู lib/cash-drawer.ts)
+  const [drawerModal, setDrawerModal] = useState(false);
+  const [drawerConnected, setDrawerConnected] = useState(false);
+  const [drawerAuto, setDrawerAuto] = useState(false);
+  const [drawerMsg, setDrawerMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDrawerAuto(localStorage.getItem("pos_drawer_auto") === "1");
+    // พอร์ตที่เคยอนุญาตไว้จะต่อกลับให้เอง ไม่ต้องกดเชื่อมต่อใหม่ทุกเช้า
+    if (isDrawerSupported()) {
+      reconnectDrawer().then((ok) => setDrawerConnected(ok));
+    }
+  }, []);
+
+  async function connectDrawer() {
+    setDrawerMsg(null);
+    try {
+      await requestDrawerPort();
+      setDrawerConnected(true);
+      setDrawerMsg("เชื่อมต่อแล้ว ✅ — ลองกด “เปิดลิ้นชักตอนนี้” เพื่อทดสอบ");
+    } catch (e) {
+      // ผู้ใช้กดยกเลิกหน้าต่างเลือกพอร์ต — ไม่ใช่ข้อผิดพลาด
+      if (e instanceof DOMException && e.name === "NotFoundError") return;
+      setDrawerMsg((e as Error).message);
+    }
+  }
+
+  async function openDrawerNow() {
+    setDrawerMsg(null);
+    try {
+      await kickDrawer();
+      setDrawerMsg("ส่งสัญญาณเปิดลิ้นชักแล้ว 💰");
+    } catch (e) {
+      setDrawerConnected(false);
+      setDrawerMsg((e as Error).message + " — กดเชื่อมต่อใหม่อีกครั้ง");
+    }
+  }
+
+  // เด้งลิ้นชักตอนรับเงินสด — ห้าม block การขาย ถ้าส่งไม่ได้ให้แจ้งเบา ๆ แทน
+  function kickDrawerForSale() {
+    kickDrawer().catch(() => {
+      setDrawerConnected(false);
+      setScanMsg("⚠️ เปิดลิ้นชักไม่สำเร็จ — เช็คสายเครื่องพิมพ์ แล้วเชื่อมต่อใหม่ที่ปุ่ม 💰 ลิ้นชัก");
+      setTimeout(() => setScanMsg(null), 5000);
+    });
+  }
 
   // บิลที่พักไว้ (เก็บในเครื่อง)
   type HeldCart = {
@@ -122,6 +216,55 @@ export default function PosClient({
     }
   }
 
+  // ---------- จอลูกค้า ----------
+  // จับคู่กับหน้า /pos-display บนอุปกรณ์อื่น (จำการจับคู่ไว้ต่อเครื่อง/สาขา)
+  const displayKey = `kd_display_link:${orgId}:${branchId ?? "none"}`;
+  const [displayId, setDisplayId] = useState<string | null>(null);
+  const [displayModal, setDisplayModal] = useState(false);
+  const [displayCode, setDisplayCode] = useState("");
+  const [displayErr, setDisplayErr] = useState<string | null>(null);
+  const [displayPending, setDisplayPending] = useState(false);
+  useEffect(() => {
+    try {
+      setDisplayId(localStorage.getItem(displayKey));
+    } catch {
+      setDisplayId(null);
+    }
+  }, [displayKey]);
+
+  function disconnectDisplay(tellServer = true) {
+    if (tellServer && displayId) unpairDisplayAction(displayId).catch(() => {});
+    setDisplayId(null);
+    try {
+      localStorage.removeItem(displayKey);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function submitPairCode() {
+    setDisplayErr(null);
+    setDisplayPending(true);
+    try {
+      const res = await pairDisplayAction(displayCode);
+      if (!res.ok || !res.id) {
+        setDisplayErr(res.error ?? "จับคู่ไม่สำเร็จ");
+        return;
+      }
+      setDisplayId(res.id);
+      try {
+        localStorage.setItem(displayKey, res.id);
+      } catch {
+        /* ignore */
+      }
+      setDisplayModal(false);
+    } catch {
+      setDisplayErr("เครือข่ายขัดข้อง — ลองใหม่อีกครั้ง");
+    } finally {
+      setDisplayPending(false);
+    }
+  }
+
   const selectedCustomer = customers.find((c) => c.id === customerId) ?? null;
 
   const filtered = useMemo(() => {
@@ -158,6 +301,43 @@ export default function PosClient({
   );
   const total = round2(Math.max(subtotal - appliedDiscount, 0));
   const change = round2(Number(cashReceived || 0) - total);
+
+  // ส่งสถานะปัจจุบันไปจอลูกค้า (debounce สั้นๆ กันยิงถี่ตอนกดรัว — ฝั่งจอรับสดผ่าน SSE)
+  // ระหว่างเปิดสรุปบิล (receipt) ไม่ส่งทับ — จอค้างสถานะ "จ่ายแล้ว" จนกดขายต่อ
+  useEffect(() => {
+    if (!displayId || receipt) return;
+    const t = setTimeout(() => {
+      let st: DisplayState;
+      if (cart.length) {
+        st = {
+          mode: "cart",
+          items: cart.map((i) => ({
+            name: i.name,
+            price: i.unit_price,
+            qty: i.qty,
+            unit: i.unit,
+            total: round2(i.unit_price * i.qty),
+          })),
+          subtotal,
+          discount: appliedDiscount,
+          total,
+          customer: selectedCustomer?.name ?? null,
+          // QR โผล่ในกล่องฝั่งขวาของจอลูกค้าเฉพาะตอนเปิดรับชำระพร้อมเพย์
+          qr: payMode === "promptpay" && qr ? qr : null,
+        };
+      } else {
+        st = { mode: "idle" };
+      }
+      pushDisplayStateAction(displayId, st)
+        .then((r) => {
+          // จอถูกยกเลิกจับคู่/หายไปแล้ว — เลิกส่งเงียบๆ
+          if (!r.ok && r.error === "not_found") disconnectDisplay(false);
+        })
+        .catch(() => {});
+    }, 120);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayId, cart, subtotal, appliedDiscount, total, payMode, qr, receipt, customerId]);
 
   function addToCart(p: ProductWithStock) {
     setCart((prev) => {
@@ -284,15 +464,28 @@ export default function PosClient({
     setCustomerId("");
     setCashReceived("");
     setQr(null);
+    setQrMode(null);
+    setGwCharge(null);
     setPayMode(null);
     setError(null);
     searchRef.current?.focus();
   }
 
-  async function openPromptPay() {
+  /** เปิด modal พร้อมเพย์ — ยังไม่สร้าง QR จนกว่าแคชเชียร์เลือกโหมด (จอลูกค้าจะยังไม่เห็นอะไร) */
+  function openPromptPay() {
     setError(null);
     setQr(null);
+    setQrMode(null);
+    setGwCharge(null);
     setPayMode("promptpay");
+  }
+
+  /** เลือกโหมด QR เบอร์ร้าน — สร้าง QR แล้วค่อยขึ้นจอลูกค้า */
+  async function loadDirectQR() {
+    setError(null);
+    setQr(null);
+    setGwCharge(null);
+    setQrMode("direct");
     try {
       const res = await getPromptPayQRAction(total);
       if (!res.ok) setError(res.error ?? "สร้าง QR ไม่สำเร็จ");
@@ -301,6 +494,62 @@ export default function PosClient({
       setError("เครือข่ายขัดข้อง — สร้าง QR ไม่สำเร็จ ลองใหม่อีกครั้ง");
     }
   }
+
+  /** สลับเป็น QR ผ่าน gateway — สร้าง charge ตามยอดบิล แล้วให้ effect ด้านล่าง poll จนเงินเข้า */
+  async function openGatewayQR() {
+    setError(null);
+    setQr(null);
+    setGwCharge(null);
+    setQrMode("gateway");
+    setGwLoading(true);
+    try {
+      const res = await createGatewayQRAction({
+        items: cart.map(({ product_id, qty }) => ({ product_id, qty })),
+        discount: round2(appliedDiscount),
+      });
+      if (!res.ok || !res.chargeId || !res.qrImage) {
+        setError(res.error ?? "สร้าง QR ไม่สำเร็จ");
+      } else {
+        setQr(res.qrImage); // ใช้ state เดิม — จอลูกค้า (customer display) เห็น QR นี้ด้วย
+        setGwCharge({ chargeId: res.chargeId });
+      }
+    } catch {
+      setError("เครือข่ายขัดข้อง — สร้าง QR ไม่สำเร็จ ลองใหม่อีกครั้ง");
+    } finally {
+      setGwLoading(false);
+    }
+  }
+
+  // poll สถานะ QR gateway ทุก 2.5 วิ — เงินเข้าแล้วปิดบิลเอง / รายการหลุด (หมดอายุ/ยกเลิก) แจ้งแคชเชียร์
+  useEffect(() => {
+    if (!gwCharge || payMode !== "promptpay") return;
+    let stopped = false;
+    const t = setInterval(async () => {
+      try {
+        const res = await checkGatewayChargeAction(gwCharge.chargeId);
+        if (stopped || !res.ok) return;
+        if (res.status === "paid") {
+          stopped = true;
+          clearInterval(t);
+          setGwCharge(null);
+          confirmCheckout("promptpay");
+        } else if (res.status === "failed") {
+          stopped = true;
+          clearInterval(t);
+          setGwCharge(null);
+          setError("รายการถูกยกเลิก/หมดอายุ — กดสร้าง QR ใหม่");
+        }
+      } catch {
+        // เน็ตสะดุดระหว่าง poll — รอบถัดไปลองใหม่เอง
+      }
+    }, 2500);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
+    // confirmCheckout เป็น closure ที่อ้าง state ล่าสุดอยู่แล้ว — ผูก dep แค่ตัวกำหนดรอบ poll
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gwCharge, payMode]);
 
   function confirmCheckout(method: "cash" | "promptpay" | "credit") {
     setError(null);
@@ -318,14 +567,30 @@ export default function PosClient({
           setError(res.error ?? "ขายไม่สำเร็จ");
           return;
         }
+        const methodLabel =
+          method === "cash" ? "เงินสด" : method === "promptpay" ? "พร้อมเพย์" : "ขายเชื่อ";
         setReceipt({
+          sale_id: res.sale_id!,
           bill_no: res.bill_no!,
           total: res.total!,
           change: res.change ?? 0,
-          method:
-            method === "cash" ? "เงินสด" : method === "promptpay" ? "พร้อมเพย์" : "ขายเชื่อ",
+          method: methodLabel,
           points: res.points ?? 0,
         });
+        // โหมดเครื่องพิมพ์หน้าร้าน: สลิปเด้งทันทีที่ขายสำเร็จ ไม่ต้องกดปุ่ม
+        if (autoPrint && res.sale_id) printReceipt(res.sale_id, paper);
+        // รับเงินสด → เด้งลิ้นชักให้หยิบเงินทอน
+        if (method === "cash" && drawerAuto && drawerConnected) kickDrawerForSale();
+        // แจ้งจอลูกค้าว่าจ่ายแล้ว (โชว์เงินทอน/ขอบคุณ ค้างไว้จนกดขายต่อ)
+        if (displayId) {
+          pushDisplayStateAction(displayId, {
+            mode: "paid",
+            total: res.total!,
+            change: res.change ?? 0,
+            method: methodLabel,
+            points: res.points ?? 0,
+          }).catch(() => {});
+        }
         resetSale();
         // ดึงสต็อก/แต้มล่าสุดมาแสดงในกริด กัน qty ค้างทั้งกะ (กัน oversell)
         router.refresh();
@@ -408,9 +673,14 @@ export default function PosClient({
                 className="card flex flex-col overflow-hidden p-3 text-left transition hover:ring-2 hover:ring-[var(--primary)]/40 disabled:opacity-40"
               >
                 <div className="mb-2 flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-slate-50 text-2xl text-slate-300">
-                  {p.image_url ? (
+                  {p.has_image ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
+                    <img
+                      src={`/api/products/${p.id}/image`}
+                      alt={p.name}
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     "📦"
                   )}
@@ -437,7 +707,42 @@ export default function PosClient({
 
       {/* Cart */}
       <div className="card flex h-fit flex-col p-4 lg:sticky lg:top-4">
-        <h2 className="text-lg font-semibold">🧾 ตะกร้า</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">🧾 ตะกร้า</h2>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                setDrawerMsg(null);
+                setDrawerModal(true);
+              }}
+              className="btn-ghost gap-1.5 px-2 py-1 text-xs"
+              title="ลิ้นชักเก็บเงิน"
+            >
+              💰 ลิ้นชัก
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  drawerConnected ? "bg-green-500" : "bg-slate-300"
+                }`}
+              />
+            </button>
+            <button
+              onClick={() => {
+                setDisplayErr(null);
+                setDisplayCode("");
+                setDisplayModal(true);
+              }}
+              className="btn-ghost gap-1.5 px-2 py-1 text-xs"
+              title="จอแสดงผลฝั่งลูกค้า"
+            >
+              🖥️ จอลูกค้า
+              <span
+                className={`inline-block h-2 w-2 rounded-full ${
+                  displayId ? "bg-green-500" : "bg-slate-300"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
 
         {/* ลูกค้า */}
         <div className="mt-3">
@@ -572,6 +877,63 @@ export default function PosClient({
         <BarcodeScanner onDetected={handleScan} onClose={() => setScanning(false)} />
       )}
 
+      {/* Customer display pairing */}
+      <Modal open={displayModal} onClose={() => setDisplayModal(false)} title="จอลูกค้า">
+        {displayId ? (
+          <div className="space-y-3">
+            <p className="flex items-center gap-2 text-sm">
+              <span className="inline-block h-2.5 w-2.5 rounded-full bg-green-500" />
+              เชื่อมต่อจอลูกค้าแล้ว — จอจะแสดงตะกร้า ยอดสุทธิ QR พร้อมเพย์ และเงินทอนอัตโนมัติ
+            </p>
+            <button
+              onClick={() => {
+                disconnectDisplay();
+                setDisplayModal(false);
+              }}
+              className="btn-outline w-full text-red-600"
+            >
+              ยกเลิกการเชื่อมต่อ
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-[var(--muted)]">
+              <li>
+                เปิด{" "}
+                <a
+                  href="/pos-display"
+                  target="_blank"
+                  className="font-medium text-[var(--primary)] underline"
+                >
+                  หน้าจอลูกค้า
+                </a>{" "}
+                บนแท็บเล็ต/จอที่สอง (login ร้านเดียวกัน)
+              </li>
+              <li>จอนั้นจะแสดงรหัส 6 หลัก — นำมากรอกด้านล่าง</li>
+            </ol>
+            <input
+              className="input text-center text-2xl tracking-[0.3em]"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="000000"
+              value={displayCode}
+              onChange={(e) => setDisplayCode(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && displayCode.length === 6) submitPairCode();
+              }}
+            />
+            {displayErr && <p className="text-sm text-red-600">{displayErr}</p>}
+            <button
+              disabled={displayPending || displayCode.length !== 6}
+              onClick={submitPairCode}
+              className="btn-primary w-full"
+            >
+              {displayPending ? "กำลังเชื่อมต่อ..." : "เชื่อมต่อ"}
+            </button>
+          </div>
+        )}
+      </Modal>
+
       {/* Cash modal */}
       <Modal open={payMode === "cash"} onClose={() => setPayMode(null)} title="รับเงินสด">
         <div className="space-y-3">
@@ -619,11 +981,57 @@ export default function PosClient({
         </div>
       </Modal>
 
-      {/* PromptPay modal */}
+      {/* PromptPay modal — 2 โหมด: QR เบอร์ร้าน (ฟรี ยืนยันเอง) / QR gateway (เช็คเงินเข้า+ปิดบิลเอง) */}
       <Modal open={payMode === "promptpay"} onClose={() => setPayMode(null)} title="รับเงินผ่านพร้อมเพย์">
         <div className="space-y-3 text-center">
           <div className="text-lg font-bold">{formatTHB(total)}</div>
-          {!hasPromptPay && (
+
+          <div className="flex justify-center gap-1 rounded-lg bg-slate-100 p-1 text-sm">
+            <button
+              onClick={() => loadDirectQR()}
+              className={`flex-1 rounded-md px-3 py-1.5 ${
+                qrMode === "direct" ? "bg-white font-medium shadow-sm" : "text-[var(--muted)]"
+              }`}
+            >
+              QR เบอร์ร้าน (ฟรี)
+            </button>
+            <button
+              onClick={() => {
+                // ยังไม่เชื่อม gateway — โชว์แท็บไว้ให้รู้ว่ามีฟีเจอร์ แต่กดแล้วบอกทางไปเชื่อมต่อ
+                if (gatewayConnected) openGatewayQR();
+                else {
+                  setQr(null);
+                  setGwCharge(null);
+                  setError(null);
+                  setQrMode("gateway");
+                }
+              }}
+              className={`flex-1 rounded-md px-3 py-1.5 ${
+                qrMode === "gateway" ? "bg-white font-medium shadow-sm" : "text-[var(--muted)]"
+              }`}
+              title="QR จาก Omise/Stripe — ระบบเช็คเงินเข้าและปิดบิลให้เอง (มีค่าธรรมเนียมของ gateway)"
+            >
+              {gatewayConnected ? "QR อัตโนมัติ ⚡" : "QR อัตโนมัติ 🔒"}
+            </button>
+          </div>
+
+          {qrMode === null && (
+            <p className="py-4 text-sm text-[var(--muted)]">
+              เลือกรูปแบบ QR ด้านบนก่อน — QR จะขึ้นจอลูกค้าหลังเลือกแล้วเท่านั้น
+            </p>
+          )}
+
+          {qrMode === "gateway" && !gatewayConnected && (
+            <div className="rounded-lg bg-indigo-50 px-3 py-3 text-sm text-indigo-800">
+              โหมดนี้ระบบจะเช็คเงินเข้าและปิดบิลให้เอง — ต้องเชื่อมต่อ Omise/Stripe ก่อน
+              <br />
+              <a href="/integrations" className="font-semibold underline">
+                ไปที่หน้า การเชื่อมต่อ →
+              </a>
+            </div>
+          )}
+
+          {qrMode === "direct" && !hasPromptPay && (
             <p className="text-sm text-amber-700">
               ยังไม่ได้ตั้งค่าเบอร์พร้อมเพย์ — ไปที่หน้าตั้งค่าก่อน
             </p>
@@ -631,18 +1039,36 @@ export default function PosClient({
           {qr && (
             <img src={qr} alt="PromptPay QR" className="mx-auto rounded-lg border border-[var(--border)]" />
           )}
-          {!qr && hasPromptPay && !error && (
+          {!qr && !error && qrMode !== null && (qrMode === "gateway" ? gwLoading : hasPromptPay) && (
             <p className="py-6 text-sm text-[var(--muted)]">กำลังสร้าง QR...</p>
           )}
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <p className="text-xs text-[var(--muted)]">ให้ลูกค้าสแกนจ่าย แล้วกดยืนยันเมื่อได้รับเงิน</p>
-          <button
-            disabled={pending || !qr}
-            onClick={() => confirmCheckout("promptpay")}
-            className="btn-primary w-full"
-          >
-            {pending ? "กำลังบันทึก..." : "ได้รับเงินแล้ว — ยืนยัน"}
-          </button>
+
+          {qrMode === "direct" && (
+            <>
+              <p className="text-xs text-[var(--muted)]">
+                ให้ลูกค้าสแกนจ่าย แล้วกดยืนยันเมื่อได้รับเงิน
+              </p>
+              <button
+                disabled={pending || !qr}
+                onClick={() => confirmCheckout("promptpay")}
+                className="btn-primary w-full"
+              >
+                {pending ? "กำลังบันทึก..." : "ได้รับเงินแล้ว — ยืนยัน"}
+              </button>
+            </>
+          )}
+          {qrMode === "gateway" && (
+            <p className="flex items-center justify-center gap-2 text-sm text-[var(--muted)]">
+              {gwCharge && !pending && (
+                <>
+                  <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                  รอลูกค้าสแกนจ่าย — เงินเข้าแล้วระบบจะปิดบิลให้เอง
+                </>
+              )}
+              {pending && "เงินเข้าแล้ว! กำลังปิดบิล..."}
+            </p>
+          )}
         </div>
       </Modal>
 
@@ -669,6 +1095,74 @@ export default function PosClient({
         </div>
       </Modal>
 
+      {/* ลิ้นชักเก็บเงิน */}
+      <Modal open={drawerModal} onClose={() => setDrawerModal(false)} title="ลิ้นชักเก็บเงิน 💰">
+        <div className="space-y-3 text-sm">
+          {!isDrawerSupported() ? (
+            <>
+              <p>
+                เบราว์เซอร์นี้ไม่รองรับการสั่งลิ้นชักโดยตรง — ใช้ <b>Chrome</b> หรือ{" "}
+                <b>Edge</b> บนคอมพิวเตอร์แคชเชียร์
+              </p>
+              <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-[var(--muted)]">
+                หรือไม่ต้องตั้งค่าอะไรเลย: เข้าไดรเวอร์เครื่องพิมพ์สลิป เปิดตัวเลือก
+                “Open cash drawer before printing” ลิ้นชักจะเด้งเองทุกครั้งที่พิมพ์ใบเสร็จ
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-[var(--muted)]">
+                ลิ้นชักต้องเสียบสาย RJ11 เข้าเครื่องพิมพ์สลิป แล้วเชื่อมต่อเครื่องพิมพ์กับ
+                เบราว์เซอร์ครั้งแรกครั้งเดียว — หลังจากนั้นระบบจะต่อให้เองอัตโนมัติ
+              </p>
+
+              {drawerConnected ? (
+                <div className="flex gap-2">
+                  <button onClick={openDrawerNow} className="btn-primary flex-1">
+                    💰 เปิดลิ้นชักตอนนี้
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await forgetDrawer();
+                      setDrawerConnected(false);
+                      setDrawerMsg(null);
+                    }}
+                    className="btn-outline"
+                  >
+                    ยกเลิกการเชื่อมต่อ
+                  </button>
+                </div>
+              ) : (
+                <button onClick={connectDrawer} className="btn-primary w-full">
+                  🔌 เชื่อมต่อเครื่องพิมพ์/ลิ้นชัก
+                </button>
+              )}
+
+              <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                <input
+                  type="checkbox"
+                  checked={drawerAuto}
+                  onChange={(e) => {
+                    setDrawerAuto(e.target.checked);
+                    localStorage.setItem("pos_drawer_auto", e.target.checked ? "1" : "0");
+                  }}
+                />
+                เปิดลิ้นชักอัตโนมัติเมื่อรับชำระเงินสด
+              </label>
+
+              {drawerMsg && (
+                <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs">{drawerMsg}</div>
+              )}
+
+              <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-[var(--muted)]">
+                ทางเลือกที่ไม่ต้องเชื่อมต่อ: ตั้งในไดรเวอร์เครื่องพิมพ์ให้
+                “เปิดลิ้นชักเมื่อพิมพ์” — ลิ้นชักจะเด้งพร้อมใบเสร็จที่พิมพ์อัตโนมัติ
+              </p>
+            </>
+          )}
+        </div>
+      </Modal>
+
       {/* Receipt */}
       <Modal open={!!receipt} onClose={() => setReceipt(null)} title="ขายสำเร็จ ✅">
         {receipt && (
@@ -686,12 +1180,66 @@ export default function PosClient({
                 ⭐ ลูกค้าได้รับ {receipt.points} แต้ม
               </div>
             )}
-            <button onClick={() => setReceipt(null)} className="btn-primary mt-4 w-full">
+
+            <div className="mt-4 flex gap-2">
+              <select
+                value={paper}
+                onChange={(e) => {
+                  const p = e.target.value as "80" | "58";
+                  setPaper(p);
+                  localStorage.setItem("pos_paper", p);
+                }}
+                className="input w-auto py-1.5 text-sm"
+                title="หน้ากว้างกระดาษสลิป"
+              >
+                <option value="80">80mm</option>
+                <option value="58">58mm</option>
+              </select>
+              <button
+                onClick={() => printReceipt(receipt.sale_id, paper)}
+                className="btn-outline flex-1"
+              >
+                🖨️ พิมพ์ใบเสร็จ
+              </button>
+            </div>
+            <label className="flex items-center justify-center gap-2 text-xs text-[var(--muted)]">
+              <input
+                type="checkbox"
+                checked={autoPrint}
+                onChange={(e) => {
+                  setAutoPrint(e.target.checked);
+                  localStorage.setItem("pos_auto_print", e.target.checked ? "1" : "0");
+                }}
+              />
+              พิมพ์ใบเสร็จอัตโนมัติเมื่อขายสำเร็จ
+            </label>
+            <a
+              href={`/sales/${receipt.sale_id}`}
+              target="_blank"
+              className="block text-xs text-[var(--primary)] underline-offset-2 hover:underline"
+            >
+              เปิดดูใบเสร็จ / ใบกำกับภาษี
+            </a>
+
+            <button onClick={() => setReceipt(null)} className="btn-primary mt-2 w-full">
               ขายต่อ
             </button>
           </div>
         )}
       </Modal>
+
+      {/* iframe พิมพ์สลิป — ซ่อนนอกจอ (ห้าม display:none ไม่งั้นบางเบราว์เซอร์ไม่ยอมพิมพ์)
+          คงไว้หลังปิด modal เพื่อให้งานพิมพ์ที่ค้างอยู่ทำงานต่อจนจบ */}
+      {printJob && (
+        <iframe
+          key={printJob.nonce}
+          src={printJob.src}
+          title="พิมพ์ใบเสร็จ"
+          aria-hidden
+          tabIndex={-1}
+          className="pointer-events-none fixed -left-[9999px] top-0 h-[600px] w-[420px] opacity-0"
+        />
+      )}
     </div>
   );
 }

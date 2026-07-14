@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { redirect } from "next/navigation";
-import { query, one } from "@/lib/db";
+import { query, withTx } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { planForOrg, PLANS } from "@/lib/plans";
 import {
@@ -79,6 +79,9 @@ export function assertPlanAllows(sub: Subscription | null, path: string): void {
 export async function productLimitError(
   orgId: string,
   sub: Subscription | null,
+  // เรียกในธุรกรรมเดียวกับ insert ได้ ด้วยการส่ง tx.query เข้ามา (แก้ P2-6 —
+  // saveProduct ครอบด้วย withTx + pg_advisory_xact_lock แล้ว count ตรงนี้จึง serialize กับ insert)
+  runQuery: typeof query = query,
 ): Promise<string | null> {
   const plan = planForOrg(sub);
   const max = PLANS[plan].limits.products;
@@ -86,12 +89,7 @@ export async function productLimitError(
 
   // นับเฉพาะสินค้าที่ยัง active — deleteProduct เป็น soft delete (is_active=false)
   // ถ้านับรวมของที่ลบแล้ว โควตาจะเต็มถาวรทั้งที่ผู้ใช้เห็นสินค้าน้อยกว่าลิมิต (list/API กรอง is_active)
-  //
-  // NOTE (P2-6, ยังไม่แก้ที่นี่): check-then-insert — count ที่นี่กับ insert ในตัว action
-  // เป็นคนละ statement ไม่มี lock/serialize → หลาย request พร้อมกันเลี่ยงเพดานได้.
-  // การแก้จริงต้องอยู่ที่ path insert (products/actions.ts — นอกขอบเขตงานนี้):
-  // ทำ check+insert ใน statement เดียว หรือ pg_advisory_xact_lock(hashtext(org_id)) ครอบ.
-  const rows = await query<{ n: number }>(
+  const rows = await runQuery<{ n: number }>(
     "select count(*)::int as n from products where org_id = $1 and is_active = true",
     [orgId],
   );
@@ -109,12 +107,14 @@ export async function productLimitError(
 export async function userLimitError(
   orgId: string,
   sub: Subscription | null,
+  // ส่ง tx.query เพื่อเช็คในธุรกรรมเดียวกับ insert (ดูคอมเมนต์ที่ productLimitError)
+  runQuery: typeof query = query,
 ): Promise<string | null> {
   const plan = planForOrg(sub);
   const max = PLANS[plan].limits.users;
   if (!Number.isFinite(max)) return null;
 
-  const rows = await query<{ n: number }>(
+  const rows = await runQuery<{ n: number }>(
     "select count(*)::int as n from memberships where org_id = $1",
     [orgId],
   );
@@ -145,40 +145,52 @@ export async function inviteUserToOrg(
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return { ok: false, error: "อีเมลไม่ถูกต้อง" };
 
-  const limitMsg = await userLimitError(ctx.org.id, ctx.subscription);
-  if (limitMsg) return { ok: false, error: limitMsg };
+  // เตรียมรหัสผ่านชั่วคราวนอกธุรกรรม (bcrypt ช้า — ไม่ควรถือ lock ระหว่างแฮช)
+  const tempPassword = randomBytes(6).toString("base64url");
+  const tempHash = await hashPassword(tempPassword);
 
-  let user = await one<{ id: string }>("select id from users where email=$1", [
-    email,
-  ]);
-  let tempPassword: string | null = null;
-  if (!user) {
-    tempPassword = randomBytes(6).toString("base64url");
-    const hash = await hashPassword(tempPassword);
-    user = await one<{ id: string }>(
-      "insert into users (email, password_hash) values ($1,$2) returning id",
-      [email, hash],
+  // เช็คลิมิต+insert สมาชิกในธุรกรรมเดียว ครอบ advisory lock ต่อ org (แก้ P2-6)
+  // key ที่สอง (2) = namespace โควตาผู้ใช้ — แยกจาก lock เพิ่มสินค้า (1)
+  return withTx(async (tx) => {
+    await tx.query("select pg_advisory_xact_lock(hashtext($1::text), 2)", [
+      ctx.org.id,
+    ]);
+
+    const limitMsg = await userLimitError(ctx.org.id, ctx.subscription, tx.query);
+    if (limitMsg) return { ok: false, error: limitMsg };
+
+    let user = await tx.one<{ id: string }>(
+      "select id from users where email=$1",
+      [email],
     );
-  }
+    let isNewUser = false;
+    if (!user) {
+      isNewUser = true;
+      user = await tx.one<{ id: string }>(
+        "insert into users (email, password_hash) values ($1,$2) returning id",
+        [email, tempHash],
+      );
+    }
 
-  const exists = await one(
-    "select id from memberships where org_id=$1 and user_id=$2",
-    [ctx.org.id, user!.id],
-  );
-  if (exists) return { ok: false, error: "พนักงานคนนี้อยู่ในร้านแล้ว" };
+    const exists = await tx.one(
+      "select id from memberships where org_id=$1 and user_id=$2",
+      [ctx.org.id, user!.id],
+    );
+    if (exists) return { ok: false, error: "พนักงานคนนี้อยู่ในร้านแล้ว" };
 
-  // สังกัดสาขาหลักไว้ก่อน (เจ้าของเปลี่ยนได้ทีหลัง)
-  const defaultBranch =
-    ctx.branches.find((b) => b.is_default) ?? ctx.branches[0] ?? null;
-  await query(
-    "insert into memberships (org_id, user_id, role, branch_id) values ($1,$2,$3,$4)",
-    [ctx.org.id, user!.id, role, defaultBranch?.id ?? null],
-  );
+    // สังกัดสาขาหลักไว้ก่อน (เจ้าของเปลี่ยนได้ทีหลัง)
+    const defaultBranch =
+      ctx.branches.find((b) => b.is_default) ?? ctx.branches[0] ?? null;
+    await tx.query(
+      "insert into memberships (org_id, user_id, role, branch_id) values ($1,$2,$3,$4)",
+      [ctx.org.id, user!.id, role, defaultBranch?.id ?? null],
+    );
 
-  return {
-    ok: true,
-    message: tempPassword
-      ? `เพิ่ม ${email} แล้ว — รหัสผ่านชั่วคราว: ${tempPassword} (ให้พนักงานเปลี่ยนภายหลัง)`
-      : `เพิ่ม ${email} เข้าร้านแล้ว`,
-  };
+    return {
+      ok: true,
+      message: isNewUser
+        ? `เพิ่ม ${email} แล้ว — รหัสผ่านชั่วคราว: ${tempPassword} (ให้พนักงานเปลี่ยนภายหลัง)`
+        : `เพิ่ม ${email} เข้าร้านแล้ว`,
+    };
+  });
 }

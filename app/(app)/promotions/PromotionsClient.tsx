@@ -5,18 +5,21 @@ import { useRouter } from "next/navigation";
 import Modal from "@/components/Modal";
 import { formatTHB, formatDate } from "@/lib/format";
 import type { Promotion } from "./page";
-import { savePromotion, deletePromotion } from "./actions";
+import { savePromotion, deletePromotion, broadcastPromotion } from "./actions";
 
 export default function PromotionsClient({
   promotions,
+  lineConnected,
 }: {
   promotions: Promotion[];
+  lineConnected: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState<Promotion | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>, after: () => void) {
     setError(null);
@@ -55,6 +58,11 @@ export default function PromotionsClient({
       {error && (
         <div className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
+        </div>
+      )}
+      {sent && (
+        <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+          ✅ ส่ง &ldquo;{sent}&rdquo; เข้า LINE ลูกค้าทุกคนที่แอด OA ของร้านแล้ว
         </div>
       )}
 
@@ -104,6 +112,23 @@ export default function PromotionsClient({
               >
                 ลบ
               </button>
+              {lineConnected && p.is_active && (
+                <button
+                  disabled={pending}
+                  onClick={() => {
+                    setSent(null);
+                    if (
+                      confirm(
+                        `ส่ง "${p.name}" เข้า LINE ลูกค้าทุกคนที่แอด OA ของร้าน?\n(ส่งแล้วเรียกคืนไม่ได้ และนับโควตาข้อความของ LINE OA)`,
+                      )
+                    )
+                      run(() => broadcastPromotion(p.id), () => setSent(p.name));
+                  }}
+                  className="btn-ghost ml-auto px-2 py-1 text-xs text-emerald-700"
+                >
+                  📣 ส่งเข้า LINE
+                </button>
+              )}
             </div>
           </div>
         ))}

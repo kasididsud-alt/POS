@@ -1,9 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { query } from "@/lib/db";
+import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 import { assertPlanAllows, assertRoleAtLeast } from "@/lib/limits";
+import { broadcastLineMessage } from "@/lib/line-api";
+import { formatTHB, formatDate } from "@/lib/format";
+import { logAudit } from "@/lib/audit";
 
 type Result = { ok: boolean; error?: string };
 
@@ -46,7 +49,66 @@ export async function savePromotion(formData: FormData): Promise<Result> {
         [orgId, name, type, value, minPurchase, startsAt, endsAt, isActive],
       );
     }
+    await logAudit(orgId, ctx.userId, id ? "promotion.update" : "promotion.create", name);
     revalidatePath("/promotions");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** ส่งโปรโมชั่นเข้า LINE ลูกค้า — broadcast ถึงทุกคนที่แอด OA ของร้าน (ผ่าน token ที่ผูกใน /integrations) */
+export async function broadcastPromotion(id: string): Promise<Result> {
+  try {
+    const ctx = await requireOrg();
+    assertPlanAllows(ctx.subscription, "/promotions");
+    const orgId = ctx.org!.id;
+
+    const promo = await one<{
+      name: string;
+      type: "percent" | "amount";
+      value: number;
+      min_purchase: number;
+      starts_at: string | null;
+      ends_at: string | null;
+      is_active: boolean;
+    }>(
+      `select name, type, value, min_purchase, starts_at, ends_at, is_active
+         from promotions where id=$1 and org_id=$2`,
+      [id, orgId],
+    );
+    if (!promo) return { ok: false, error: "ไม่พบโปรโมชั่น" };
+    if (!promo.is_active)
+      return { ok: false, error: "โปรโมชั่นนี้ปิดอยู่ — เปิดใช้งานก่อนส่ง" };
+
+    const line = await one<{ channel_token: string }>(
+      "select channel_token from line_settings where org_id=$1",
+      [orgId],
+    );
+    if (!line)
+      return {
+        ok: false,
+        error: "ยังไม่ได้เชื่อมต่อ LINE — ตั้งค่าที่หน้า การเชื่อมต่อ ก่อน",
+      };
+
+    const discount =
+      promo.type === "percent"
+        ? `ลด ${Number(promo.value)}%`
+        : `ลด ${formatTHB(Number(promo.value))}`;
+    const parts = [
+      `🎉 ${ctx.org!.name} จัดโปรโมชั่น!`,
+      `${promo.name} — ${discount}`,
+    ];
+    if (Number(promo.min_purchase) > 0)
+      parts.push(`เมื่อซื้อครบ ${formatTHB(Number(promo.min_purchase))}`);
+    if (promo.starts_at || promo.ends_at)
+      parts.push(
+        `ช่วงเวลา: ${promo.starts_at ? formatDate(promo.starts_at) : "วันนี้"} – ${promo.ends_at ? formatDate(promo.ends_at) : "ไม่จำกัด"}`,
+      );
+    parts.push("แล้วเจอกันที่ร้านนะคะ 🙏");
+
+    await broadcastLineMessage(line.channel_token, parts.join("\n"));
+    await logAudit(orgId, ctx.userId, "promotion.broadcast", promo.name);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
@@ -56,8 +118,10 @@ export async function savePromotion(formData: FormData): Promise<Result> {
 export async function deletePromotion(id: string): Promise<Result> {
   try {
     // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดต้องลบโปรที่ยัง active ได้ (ไม่งั้นส่วนลดค้างที่ POS)
-    const orgId = (await requireOrg()).org!.id;
+    const ctx = await requireOrg();
+    const orgId = ctx.org!.id;
     await query("delete from promotions where id=$1 and org_id=$2", [id, orgId]);
+    await logAudit(orgId, ctx.userId, "promotion.delete", id);
     revalidatePath("/promotions");
     return { ok: true };
   } catch (e) {

@@ -31,6 +31,7 @@ export type Organization = {
   tax_id: string | null;
   vat_registered: boolean;
   vat_rate: number;
+  logo_url: string | null;
   stripe_customer_id: string | null;
   created_at: string;
   updated_at: string;
@@ -119,9 +120,12 @@ export type Product = {
   updated_at: string;
 };
 
-export type ProductWithStock = Product & {
+// list สินค้าไม่พกรูป base64 (หนักมากเมื่อสินค้าหลักพัน) — ส่ง has_image แทน
+// แล้วให้ UI โหลดรูปผ่าน /api/products/[id]/image เป็นรายตัว (cache ได้)
+export type ProductWithStock = Omit<Product, "image_url"> & {
   qty: number;
   category_name?: string | null;
+  has_image: boolean;
 };
 
 export type Sale = {

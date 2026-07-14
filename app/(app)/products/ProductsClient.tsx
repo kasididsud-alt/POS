@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Modal from "@/components/Modal";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import Barcode from "@/components/Barcode";
-import ImageUpload from "@/components/ImageUpload";
+import ImageUpload, { KEEP_IMAGE } from "@/components/ImageUpload";
 import { formatTHB } from "@/lib/format";
 import type { Category, ProductWithStock } from "@/lib/types";
 import { saveProduct, receiveStock, reduceStock, createCategory, deleteProduct, assignMissingBarcodes } from "./actions";
@@ -14,13 +14,23 @@ import { generateInternalEAN13 } from "@/lib/barcode";
 export default function ProductsClient({
   products,
   categories,
+  total,
+  page,
+  pageSize,
+  q,
+  missingBarcodes,
 }: {
   products: ProductWithStock[];
   categories: Category[];
+  total: number;
+  page: number;
+  pageSize: number;
+  q: string;
+  missingBarcodes: number;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(q);
   const [editing, setEditing] = useState<ProductWithStock | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [receiving, setReceiving] = useState<ProductWithStock | null>(null);
@@ -32,10 +42,23 @@ export default function ProductsClient({
   const [barcodeView, setBarcodeView] = useState("");
   const barcodeRef = useRef<HTMLInputElement>(null);
 
-  const missingBarcodes = useMemo(
-    () => products.filter((p) => p.is_active && !p.barcode).length,
-    [products],
-  );
+  // ค้นหา/แบ่งหน้าเป็นงานฝั่ง server — พิมพ์แล้วหน่วงสั้นๆ ค่อยอัปเดต URL ให้ re-render
+  useEffect(() => {
+    if (search === q) return;
+    const t = setTimeout(() => {
+      router.replace(`/products?${new URLSearchParams(search ? { q: search } : {})}`);
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  function goPage(p: number) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (p > 1) params.set("page", String(p));
+    router.push(`/products?${params}`);
+  }
 
   function genBarcodes() {
     setError(null);
@@ -50,16 +73,8 @@ export default function ProductsClient({
     });
   }
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.sku?.toLowerCase().includes(q) ||
-        p.barcode?.toLowerCase().includes(q),
-    );
-  }, [products, search]);
+  // แถวที่โชว์มาจาก server ตาม q/page แล้ว
+  const filtered = products;
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>, after: () => void) {
     setError(null);
@@ -79,7 +94,7 @@ export default function ProductsClient({
         <div>
           <h1 className="text-2xl font-bold">สินค้า / คลัง</h1>
           <p className="text-sm text-[var(--muted)]">
-            ทั้งหมด {products.length} รายการ
+            ทั้งหมด {total} รายการ{q ? ` (ค้นหา "${q}")` : ""}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -147,9 +162,14 @@ export default function ProductsClient({
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-slate-50 text-2xl text-slate-300">
-                        {p.image_url ? (
+                        {p.has_image ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
+                          <img
+                            src={`/api/products/${p.id}/image`}
+                            alt={p.name}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
                         ) : (
                           "📦"
                         )}
@@ -219,6 +239,27 @@ export default function ProductsClient({
             })}
           </tbody>
         </table>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-[var(--border)] px-4 py-3 text-sm">
+            <button
+              onClick={() => goPage(page - 1)}
+              disabled={page <= 1}
+              className="btn-outline px-3 py-1.5 disabled:opacity-40"
+            >
+              ← ก่อนหน้า
+            </button>
+            <span className="text-[var(--muted)]">
+              หน้า {page} จาก {totalPages}
+            </span>
+            <button
+              onClick={() => goPage(page + 1)}
+              disabled={page >= totalPages}
+              className="btn-outline px-3 py-1.5 disabled:opacity-40"
+            >
+              ถัดไป →
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -266,7 +307,12 @@ export default function ProductsClient({
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <div>
             <label className="label">รูปสินค้า</label>
-            <ImageUpload name="image_url" defaultValue={editing?.image_url} />
+            <ImageUpload
+              name="image_url"
+              // แก้ไขสินค้าที่มีรูป: เริ่มที่ "คงรูปเดิม" (list ไม่พก base64 แล้ว)
+              defaultValue={editing?.has_image ? KEEP_IMAGE : ""}
+              previewUrl={editing?.has_image ? `/api/products/${editing.id}/image` : null}
+            />
           </div>
           <div>
             <label className="label">ชื่อสินค้า *</label>

@@ -21,5 +21,8 @@ export default async function PromotionsPage() {
     [ctx.org.id],
   );
 
-  return <PromotionsClient promotions={promotions} />;
+  // เชื่อม LINE แล้วหรือยัง — ใช้โชว์/ซ่อนปุ่ม "ส่งเข้า LINE"
+  const line = await query("select 1 from line_settings where org_id=$1", [ctx.org.id]);
+
+  return <PromotionsClient promotions={promotions} lineConnected={line.length > 0} />;
 }

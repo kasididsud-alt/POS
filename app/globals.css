@@ -52,6 +52,18 @@ body {
 }
 
 /* ============================================================
+   เอกสารทางการ (ใบเสร็จ/ใบกำกับภาษี) — ฟอนต์หัวเอกสาร + ตัวเลขบัญชี
+   ============================================================ */
+.doc-display {
+  font-family: var(--font-display), var(--font-noto-thai), sans-serif;
+  letter-spacing: -0.01em;
+}
+.doc-num {
+  font-family: var(--font-mono), var(--font-noto-thai), sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
    Shared public-page theme — unchanged pricing/policy/home shell
    ============================================================ */
 .lp {
@@ -67,6 +79,7 @@ body {
   --rule: #dbe6db;
   --stamp: var(--gold-d);
   --muted2: #55675b;
+  /* override token ของแอป ให้คลาสกลาง (btn-primary/input/label/card) เข้าธีมนี้อัตโนมัติ */
   --primary: var(--green);
   --primary-fg: #ffffff;
   --border: var(--rule);
@@ -90,13 +103,12 @@ body {
   font-family: var(--font-display), var(--font-noto-thai), sans-serif;
   letter-spacing: -0.01em;
 }
-
+/* หน้า auth (login/signup/ลืมรหัส): หัวข้อใช้ฟอนต์ display อัตโนมัติ */
 .lp-auth h1,
 .lp-auth h2 {
   font-family: var(--font-display), var(--font-noto-thai), sans-serif;
   letter-spacing: -0.01em;
 }
-
 .lp-mono {
   font-family: var(--font-mono), var(--font-noto-thai), sans-serif;
 }
@@ -941,6 +953,15 @@ body {
     width: 100% !important;
     margin: 0 !important;
     padding: 1.5mm !important;
+  }
+  /* เอกสาร/รายงานที่พิมพ์ตรง (window.print ไม่ตั้ง data-paper) — เอาเงา/กรอบออก */
+  main .doc-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
   }
   /* A4: เอกสารเต็มรูป — เอาเงา/กรอบการ์ดออก ให้เต็มพื้นที่กระดาษ */
   html[data-paper="a4"] main .card {

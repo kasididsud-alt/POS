@@ -11,8 +11,13 @@ export async function getProductsWithStock(
   branchId: string | null,
   opts: { activeOnly?: boolean } = {},
 ): Promise<ProductWithStock[]> {
+  // เจตนาไม่ select image_url — base64 ของทุกชิ้นทำให้ list หนักมากที่สินค้าหลักพัน
+  // UI ใช้ has_image แล้วโหลดรูปเป็นรายตัวผ่าน /api/products/[id]/image
   return query<ProductWithStock>(
-    `select p.*,
+    `select p.id, p.org_id, p.category_id, p.sku, p.barcode, p.name,
+            p.price, p.cost, p.unit, p.low_stock_threshold, p.is_active,
+            p.created_at, p.updated_at,
+            (p.image_url is not null) as has_image,
             coalesce(ps.qty, 0) as qty,
             c.name as category_name
        from products p
@@ -23,6 +28,42 @@ export async function getProductsWithStock(
       order by p.created_at desc`,
     [orgId, branchId, opts.activeOnly ?? false],
   );
+}
+
+/**
+ * หน้ารายการสินค้า: แบ่งหน้า + ค้นหาฝั่ง DB (ชื่อ/SKU/บาร์โค้ด)
+ * — ร้านที่สินค้าหลักพันไม่ต้องลากทั้งตารางมาที่เบราว์เซอร์
+ * total ใช้ window function เพื่อจบใน query เดียว
+ */
+export async function getProductsPage(
+  orgId: string,
+  branchId: string | null,
+  opts: { q?: string; page?: number; pageSize?: number } = {},
+): Promise<{ rows: ProductWithStock[]; total: number }> {
+  const pageSize = Math.min(Math.max(opts.pageSize ?? 50, 1), 200);
+  const page = Math.max(opts.page ?? 1, 1);
+  const q = (opts.q ?? "").trim();
+  const rows = await query<ProductWithStock & { total_count: number }>(
+    `select p.id, p.org_id, p.category_id, p.sku, p.barcode, p.name,
+            p.price, p.cost, p.unit, p.low_stock_threshold, p.is_active,
+            p.created_at, p.updated_at,
+            (p.image_url is not null) as has_image,
+            coalesce(ps.qty, 0) as qty,
+            c.name as category_name,
+            count(*) over()::int as total_count
+       from products p
+       left join product_stock ps on ps.product_id = p.id and ps.branch_id = $2
+       left join categories c on c.id = p.category_id
+      where p.org_id = $1
+        and ($3 = '' or p.name ilike '%' || $3 || '%'
+             or p.sku ilike '%' || $3 || '%'
+             or p.barcode ilike '%' || $3 || '%')
+      order by p.created_at desc
+      limit $4 offset $5`,
+    [orgId, branchId, q, pageSize, (page - 1) * pageSize],
+  );
+  const total = rows[0]?.total_count ?? 0;
+  return { rows: rows.map(({ total_count: _t, ...r }) => r as ProductWithStock), total };
 }
 
 /**

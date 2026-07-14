@@ -32,9 +32,35 @@ export async function updateOrg(formData: FormData): Promise<Result> {
         : 7;
     if (!name) return { ok: false, error: "กรุณากรอกชื่อร้าน" };
 
+    // โลโก้ร้าน — semantics เดียวกับรูปสินค้า: "__keep__" คงเดิม / "" ลบ / data URL ตั้งใหม่
+    const rawLogo = String(formData.get("logo_url") ?? "__keep__").trim();
+    const keepLogo = rawLogo === "__keep__";
+    const logo = keepLogo ? null : rawLogo || null;
+    if (logo) {
+      if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(logo))
+        return { ok: false, error: "รูปโลโก้ไม่ถูกต้อง" };
+      if (logo.length > 1_500_000)
+        return { ok: false, error: "รูปโลโก้ใหญ่เกินไป" };
+    }
+
     await query(
-      "update organizations set name=$1, promptpay_id=$2, address=$3, phone=$4, tax_id=$5, vat_registered=$6, vat_rate=$7 where id=$8",
-      [name, promptpay, address, phone, taxId, vatRegistered, vatRate, ctx.org!.id],
+      `update organizations
+          set name=$1, promptpay_id=$2, address=$3, phone=$4, tax_id=$5,
+              vat_registered=$6, vat_rate=$7,
+              logo_url = case when $9::boolean then logo_url else $8 end
+        where id=$10`,
+      [
+        name,
+        promptpay,
+        address,
+        phone,
+        taxId,
+        vatRegistered,
+        vatRate,
+        logo,
+        keepLogo,
+        ctx.org!.id,
+      ],
     );
     revalidatePath("/settings");
     revalidatePath("/", "layout");

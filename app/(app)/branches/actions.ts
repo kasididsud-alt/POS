@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 import { assertPlanAllows } from "@/lib/limits";
+import { logAudit } from "@/lib/audit";
 
 type Result = { ok: boolean; error?: string };
 
@@ -42,6 +43,7 @@ export async function saveBranch(formData: FormData): Promise<Result> {
         [orgId, name, type, address, phone],
       );
     }
+    await logAudit(orgId, ctx.userId, id ? "branch.update" : "branch.create", name);
     revalidatePath("/branches");
     return { ok: true };
   } catch (e) {
@@ -52,7 +54,8 @@ export async function saveBranch(formData: FormData): Promise<Result> {
 export async function deleteBranch(id: string): Promise<Result> {
   try {
     // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดต้องลบสาขาส่วนเกินเพื่อกลับมาตามลิมิตได้
-    const orgId = (await requireOrg()).org!.id;
+    const ctx = await requireOrg();
+    const orgId = ctx.org!.id;
 
     const b = await one<{ is_default: boolean }>(
       "select is_default from branches where id=$1 and org_id=$2",
@@ -72,6 +75,7 @@ export async function deleteBranch(id: string): Promise<Result> {
       return { ok: false, error: "มีพนักงานสังกัดสาขานี้ — ย้ายพนักงานไปสาขาอื่นก่อน" };
 
     await query("delete from branches where id=$1 and org_id=$2", [id, orgId]);
+    await logAudit(orgId, ctx.userId, "branch.delete", id);
     revalidatePath("/branches");
     return { ok: true };
   } catch (e) {

@@ -3,13 +3,45 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getAppContext, isSubscriptionActive } from "@/lib/auth";
 import { isAdminEmail } from "@/lib/admin";
-import { planForOrg } from "@/lib/plans";
+import { planForOrg, PLANS, type PlanId } from "@/lib/plans";
 import { assertPlanForPath, assertRoleForPath } from "@/lib/limits";
 import { countStockAlerts } from "@/lib/queries";
 import { signOutAction } from "@/app/(auth)/actions";
 import Sidebar from "@/components/Sidebar";
 import MobileNav from "@/components/MobileNav";
 import BranchSwitcher from "@/components/BranchSwitcher";
+
+const THAI_DATE = new Intl.DateTimeFormat("th-TH", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+/** ป้ายระดับแพ็กเกจข้างชื่อผู้ใช้ — owner คลิกไป /billing ได้, role อื่นเป็นป้ายเฉยๆ */
+function PlanBadge({
+  plan,
+  trialing,
+  canManage,
+}: {
+  plan: PlanId;
+  trialing: boolean;
+  canManage: boolean;
+}) {
+  const tone: Record<PlanId, string> = {
+    free: "bg-slate-100 text-slate-700 border-slate-200",
+    pro: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    premium: "bg-amber-50 text-amber-800 border-amber-300",
+  };
+  const label = `${PLANS[plan].name}${trialing ? " · ทดลอง" : ""}`;
+  const cls = `rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${tone[plan]}`;
+
+  if (!canManage) return <span className={cls}>{label}</span>;
+  return (
+    <Link href="/billing" title="แพ็กเกจปัจจุบัน — คลิกเพื่อดู/อัปเกรด" className={`${cls} hover:opacity-80`}>
+      {label}
+    </Link>
+  );
+}
 
 export default async function AppLayout({
   children,
@@ -24,6 +56,10 @@ export default async function AppLayout({
   const trialing = ctx.subscription?.status === "trialing";
   const role = ctx.membership?.role ?? "cashier";
   const plan = planForOrg(ctx.subscription);
+  const trialEndsAt = trialing ? (ctx.subscription?.trial_ends_at ?? null) : null;
+  const trialDaysLeft = trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86_400_000))
+    : null;
 
   // เช็คสิทธิ์ตามแพ็ก + role จุดเดียว — แพ็กต่ำกว่าเด้ง /billing, พนักงานเข้าหน้า owner-only เด้ง /dashboard
   const pathname = (await headers()).get("x-pathname") ?? "";
@@ -62,6 +98,7 @@ export default async function AppLayout({
             >
               {ctx.email}
             </Link>
+            <PlanBadge plan={plan} trialing={trialing} canManage={role === "owner"} />
             <form action={signOutAction}>
               <button type="submit" className="btn-outline px-3 py-1.5 text-sm">
                 ออกจากระบบ
@@ -81,9 +118,16 @@ export default async function AppLayout({
         )}
         {subActive && trialing && (
           <div className="bg-indigo-50 px-4 py-2 text-center text-sm text-indigo-800 print:hidden">
-            🎁 อยู่ในช่วงทดลองใช้ฟรี —{" "}
-            <Link href="/settings" className="font-semibold underline">
-              ดูแพ็กเกจ
+            🎁 กำลังทดลองใช้แพ็ก &ldquo;{PLANS[plan].name}&rdquo; ฟรี
+            {trialEndsAt && (
+              <>
+                {" "}ถึง {THAI_DATE.format(new Date(trialEndsAt))}
+                {trialDaysLeft !== null && ` (เหลืออีก ${trialDaysLeft} วัน)`}
+              </>
+            )}{" "}
+            —{" "}
+            <Link href="/billing" className="font-semibold underline">
+              ดูว่าแพ็กนี้ทำอะไรได้บ้าง
             </Link>
           </div>
         )}

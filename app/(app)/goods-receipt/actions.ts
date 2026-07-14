@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { one, query } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import type { ReceiptLine } from "@/lib/types";
 
 export type ReceiveInput = {
@@ -52,6 +53,12 @@ export async function receiveGoods(input: ReceiveInput): Promise<ReceiveResult> 
         ctx.userId,
         ctx.branchId,
       ],
+    );
+    await logAudit(
+      ctx.org.id,
+      ctx.userId,
+      "stock.receive",
+      `รับเข้า ${items.length} รายการ${input.ref_no ? ` (อ้างอิง ${input.ref_no})` : ""}`,
     );
     revalidatePath("/goods-receipt");
     revalidatePath("/stock");

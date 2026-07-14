@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import { assertPlanAllows } from "@/lib/limits";
 
 type Result = { ok: boolean; error?: string };
@@ -40,6 +41,7 @@ export async function addDebt(formData: FormData): Promise<Result> {
        values ($1,$2,$3,$4,$5,$6)`,
       [ctx.org!.id, customerId, amount, dueDate, note, ctx.userId],
     );
+    await logAudit(ctx.org!.id, ctx.userId, "debt.create", `ยอด ${amount}`);
     revalidatePath("/receivables");
     return { ok: true };
   } catch (e) {
@@ -71,6 +73,7 @@ export async function recordPayment(
       debtId,
       ctx.org!.id,
     ]);
+    await logAudit(ctx.org!.id, ctx.userId, "debt.payment", `รับชำระ ${amount} (${status})`);
     revalidatePath("/receivables");
     return { ok: true };
   } catch (e) {
@@ -83,6 +86,7 @@ export async function deleteDebt(id: string): Promise<Result> {
     // ไม่ gate แพ็กตรงลบ — ร้านที่ดาวน์เกรดยังเก็บกวาดข้อมูลเดิมได้
     const ctx = await requireOrg();
     await query("delete from debts where id=$1 and org_id=$2", [id, ctx.org!.id]);
+    await logAudit(ctx.org!.id, ctx.userId, "debt.delete", id);
     revalidatePath("/receivables");
     return { ok: true };
   } catch (e) {

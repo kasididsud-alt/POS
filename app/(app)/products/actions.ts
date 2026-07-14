@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { query, one } from "@/lib/db";
+import { query, one, withTx } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 import { productLimitError, assertRoleAtLeast } from "@/lib/limits";
 import { logAudit } from "@/lib/audit";
@@ -22,6 +22,10 @@ export async function saveProduct(formData: FormData): Promise<ActionResult> {
     const name = String(formData.get("name") ?? "").trim();
     if (!name) return { ok: false, error: "กรุณากรอกชื่อสินค้า" };
 
+    // รูป: "__keep__" = คงรูปเดิม (ฟอร์มแก้ไขไม่มี base64 เดิมในมือแล้ว), "" = ลบรูป, data URL = ตั้งใหม่
+    const rawImage = String(formData.get("image_url") ?? "").trim();
+    const keepImage = rawImage === "__keep__";
+
     const fields = {
       name,
       sku: String(formData.get("sku") ?? "").trim() || null,
@@ -31,7 +35,7 @@ export async function saveProduct(formData: FormData): Promise<ActionResult> {
       unit: String(formData.get("unit") ?? "ชิ้น").trim() || "ชิ้น",
       low_stock_threshold: Number(formData.get("low_stock_threshold") ?? 5),
       category_id: String(formData.get("category_id") ?? "").trim() || null,
-      image_url: String(formData.get("image_url") ?? "").trim() || null,
+      image_url: keepImage ? null : rawImage || null,
     };
 
     // ---- validation ----
@@ -62,7 +66,9 @@ export async function saveProduct(formData: FormData): Promise<ActionResult> {
       assertRoleAtLeast(ctx.membership?.role, "manager");
       await query(
         `update products set name=$1, sku=$2, barcode=$3, price=$4, cost=$5,
-                unit=$6, low_stock_threshold=$7, category_id=$8, image_url=$9
+                unit=$6, low_stock_threshold=$7, category_id=$8,
+                image_url = case when $12::boolean then image_url else $9 end,
+                updated_at = now()
           where id=$10 and org_id=$11`,
         [
           fields.name,
@@ -76,38 +82,46 @@ export async function saveProduct(formData: FormData): Promise<ActionResult> {
           fields.image_url,
           id,
           orgId,
+          keepImage,
         ],
       );
     } else {
-      // เพิ่มสินค้าใหม่ — เช็คลิมิตตามแพ็กก่อน
-      const limitErr = await productLimitError(orgId, ctx.subscription);
-      if (limitErr) return { ok: false, error: limitErr };
-
-      const inserted = await one<{ id: string }>(
-        `insert into products (org_id, name, sku, barcode, price, cost, unit, low_stock_threshold, category_id, image_url)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
-        [
-          orgId,
-          fields.name,
-          fields.sku,
-          fields.barcode,
-          fields.price,
-          fields.cost,
-          fields.unit,
-          fields.low_stock_threshold,
-          fields.category_id,
-          fields.image_url,
-        ],
-      );
+      // เพิ่มสินค้าใหม่ — เช็คลิมิต+insert ในธุรกรรมเดียว ครอบด้วย advisory lock ต่อ org
+      // กันหลาย request พร้อมกันนับโควตาก่อน insert แล้วทะลุเพดานแพ็ก (P2-6)
       const initialQty = Number(formData.get("initial_qty") ?? 0);
-      if (initialQty > 0 && inserted) {
-        if (!branchId) return { ok: false, error: "ยังไม่ได้กำหนดสาขา" };
-        await query(
-          `insert into stock_movements (org_id, product_id, branch_id, qty_change, reason, note)
-           values ($1,$2,$3,$4,'purchase','สต็อกตั้งต้น')`,
-          [orgId, inserted.id, branchId, initialQty],
+      if (initialQty > 0 && !branchId)
+        return { ok: false, error: "ยังไม่ได้กำหนดสาขา" };
+
+      await withTx(async (tx) => {
+        // key ที่สอง (1) = namespace โควตาสินค้า — ไม่ชนกับ lock เชิญพนักงาน (2)
+        await tx.query("select pg_advisory_xact_lock(hashtext($1::text), 1)", [orgId]);
+        const limitErr = await productLimitError(orgId, ctx.subscription, tx.query);
+        if (limitErr) throw new Error(limitErr);
+
+        const inserted = await tx.one<{ id: string }>(
+          `insert into products (org_id, name, sku, barcode, price, cost, unit, low_stock_threshold, category_id, image_url)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
+          [
+            orgId,
+            fields.name,
+            fields.sku,
+            fields.barcode,
+            fields.price,
+            fields.cost,
+            fields.unit,
+            fields.low_stock_threshold,
+            fields.category_id,
+            fields.image_url,
+          ],
         );
-      }
+        if (initialQty > 0 && inserted) {
+          await tx.query(
+            `insert into stock_movements (org_id, product_id, branch_id, qty_change, reason, note)
+             values ($1,$2,$3,$4,'purchase','สต็อกตั้งต้น')`,
+            [orgId, inserted.id, branchId, initialQty],
+          );
+        }
+      });
     }
 
     await logAudit(

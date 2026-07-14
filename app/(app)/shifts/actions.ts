@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 
 function fail(msg: string): never {
   redirect("/shifts?error=" + encodeURIComponent(msg));
@@ -26,6 +27,7 @@ export async function openShift(formData: FormData): Promise<void> {
     "insert into cash_shifts (org_id, branch_id, opened_by, opening_cash) values ($1,$2,$3,$4)",
     [ctx.org.id, ctx.branchId, ctx.userId, opening],
   );
+  await logAudit(ctx.org.id, ctx.userId, "shift.open", `เงินตั้งต้น ${opening}`);
   revalidatePath("/shifts");
 }
 
@@ -70,6 +72,12 @@ export async function closeShift(formData: FormData): Promise<void> {
     `update cash_shifts set closing_cash=$1, expected_cash=$2, status='closed', closed_at=now()
       where id=$3 and org_id=$4`,
     [closing, expected, shiftId, ctx.org.id],
+  );
+  await logAudit(
+    ctx.org.id,
+    ctx.userId,
+    "shift.close",
+    `นับได้ ${closing} คาดว่า ${expected} (ต่าง ${(closing - expected).toFixed(2)})`,
   );
   revalidatePath("/shifts");
 }

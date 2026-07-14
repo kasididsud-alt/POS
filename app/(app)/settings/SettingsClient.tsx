@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Organization } from "@/lib/types";
+import ImageUpload, { KEEP_IMAGE } from "@/components/ImageUpload";
 import { updateOrg, inviteMember, removeMember } from "./actions";
 
 type Member = { user_id: string; role: string; email: string };
@@ -78,6 +79,36 @@ export default function SettingsClient({
           </div>
           <div className="border-t border-[var(--border)] pt-3 text-xs font-medium text-[var(--muted)]">
             ข้อมูลสำหรับใบเสร็จ / ใบกำกับภาษี
+          </div>
+          <div>
+            <label className="label">โลโก้ร้าน</label>
+            {isOwner ? (
+              <>
+                <ImageUpload
+                  name="logo_url"
+                  format="png"
+                  defaultValue={org.logo_url ? KEEP_IMAGE : ""}
+                  previewUrl={org.logo_url}
+                />
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  แสดงบนหัวใบเสร็จ ใบกำกับภาษี และรายงาน — พื้นหลังโปร่งใสได้
+                  (แนะนำภาพจัตุรัส)
+                </p>
+              </>
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-slate-50 text-xl text-slate-300">
+                {org.logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={org.logo_url}
+                    alt="โลโก้ร้าน"
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  "🖼️"
+                )}
+              </div>
+            )}
           </div>
           <div>
             <label className="label">ที่อยู่ร้าน</label>

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { logAudit } from "@/lib/audit";
+import { derivePlan } from "@/lib/admin-queries";
+import type { Subscription } from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
 
@@ -16,10 +18,23 @@ function revalidateOrg(orgId: string) {
   revalidatePath("/admin");
 }
 
+/** ระดับที่มีผลจริงของร้านหลังแก้ subscription (อ่านซ้ำจาก DB) */
+async function effectivePlan(orgId: string) {
+  const after = await one<
+    Pick<Subscription, "status" | "price_id" | "trial_ends_at" | "comp_plan">
+  >(
+    "select status, price_id, trial_ends_at, comp_plan from subscriptions where org_id = $1",
+    [orgId],
+  );
+  return derivePlan(after);
+}
+
 /**
- * comp แพ็กเกจให้ร้าน (override subscription จริง โดยไม่ผ่าน Stripe)
- * plan = 'free' | 'pro' | 'premium' → ตั้ง comp_plan
- * plan = 'clear' → ลบ comp_plan (กลับไปคิดตาม subscription/trial จริง)
+ * ตั้งระดับแพ็กเกจให้ร้าน (โดยไม่ผ่าน Stripe)
+ * plan = 'pro' | 'premium' → ตั้ง comp_plan (comp เป็น "พื้น" — ยกระดับได้อย่างเดียว)
+ * plan = 'free'            → ปรับร้านเป็นฟรีจริง: ล้าง comp + ตัด trial
+ *                            (ห้ามใช้กับร้านที่จ่ายเงินจริงผ่าน Stripe)
+ * plan = 'clear'           → ลบ comp_plan (กลับไปคิดตาม subscription/trial จริง)
  */
 export async function setOrgPlan(
   orgId: string,
@@ -36,13 +51,49 @@ export async function setOrgPlan(
       );
       await logAudit(orgId, admin.id, "admin.comp_plan", "clear");
       revalidateOrg(orgId);
-      return { ok: true, message: "ยกเลิก comp แพ็กเกจแล้ว (กลับไปคิดตามจริง)" };
+      const eff = await effectivePlan(orgId);
+      return {
+        ok: true,
+        message: `ยกเลิก comp แล้ว — ตอนนี้ร้านเป็น ${eff.toUpperCase()} ตามจริง`,
+      };
     }
 
     if (!COMP_PLANS.includes(plan))
       return { ok: false, error: "แพ็กเกจไม่ถูกต้อง" };
 
-    // upsert เผื่อร้านยังไม่มีแถว subscription
+    if (plan === "free") {
+      // comp_plan เป็น "พื้น" กดลงไม่ได้ — จะให้ร้านเป็นฟรีจริงต้องตัด trial/comp ทิ้ง
+      const cur = await one<{
+        status: string;
+        stripe_subscription_id: string | null;
+      }>(
+        "select status, stripe_subscription_id from subscriptions where org_id = $1",
+        [orgId],
+      );
+      if (cur?.stripe_subscription_id) {
+        return {
+          ok: false,
+          error:
+            "ร้านนี้จ่ายเงินจริงผ่าน Stripe — ปรับเป็นฟรีจากตรงนี้ไม่ได้ ต้องยกเลิก subscription ใน Stripe ก่อน",
+        };
+      }
+      await query(
+        `insert into subscriptions (org_id, status, comp_plan, trial_ends_at)
+           values ($1, 'canceled', null, null)
+         on conflict (org_id) do update
+           set status = 'canceled', comp_plan = null, trial_ends_at = null,
+               updated_at = now()`,
+        [orgId],
+      );
+      await logAudit(orgId, admin.id, "admin.comp_plan", "force_free");
+      revalidateOrg(orgId);
+      return {
+        ok: true,
+        message: "ปรับร้านเป็น FREE แล้ว (ตัด trial/comp ทิ้ง)",
+      };
+    }
+
+    // pro/premium → comp (upsert เผื่อร้านยังไม่มีแถว subscription)
     await query(
       `insert into subscriptions (org_id, status, comp_plan)
          values ($1, 'active', $2)
@@ -52,7 +103,14 @@ export async function setOrgPlan(
     );
     await logAudit(orgId, admin.id, "admin.comp_plan", plan);
     revalidateOrg(orgId);
-    return { ok: true, message: `ตั้งแพ็กเกจเป็น ${plan.toUpperCase()} แล้ว` };
+    const eff = await effectivePlan(orgId);
+    return {
+      ok: true,
+      message:
+        eff === plan
+          ? `ตั้งแพ็กเกจเป็น ${plan.toUpperCase()} แล้ว`
+          : `ตั้ง comp = ${plan.toUpperCase()} แล้ว — แต่ร้านมีสิทธิ์ ${eff.toUpperCase()} จาก subscription จริงซึ่งสูงกว่า`,
+    };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
@@ -140,6 +198,23 @@ export async function setMemberRole(
     await logAudit(orgId, admin.id, "admin.set_role", `${userId} → ${role}`);
     revalidateOrg(orgId);
     return { ok: true, message: "เปลี่ยนสิทธิ์แล้ว" };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** ปิดเรื่องข้อความติดต่อทีมงาน */
+export async function resolveContactMessage(id: string): Promise<Result> {
+  try {
+    const admin = await requireAdmin();
+    const row = await one<{ org_id: string }>(
+      "update contact_messages set resolved_at=now() where id=$1 and resolved_at is null returning org_id",
+      [id],
+    );
+    if (!row) return { ok: false, error: "ไม่พบข้อความ (หรือปิดไปแล้ว)" };
+    await logAudit(row.org_id, admin.id, "admin.contact_resolve", id);
+    revalidatePath("/admin");
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }

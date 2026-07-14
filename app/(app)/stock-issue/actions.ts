@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { query, one } from "@/lib/db";
 import { getAppContext } from "@/lib/auth";
 import { assertRoleAtLeast } from "@/lib/limits";
+import { logAudit } from "@/lib/audit";
 
 type Result = { ok: boolean; error?: string };
 
@@ -49,6 +50,7 @@ export async function issueStock(formData: FormData): Promise<Result> {
       [ctx.org.id, productId, ctx.branchId, -Math.abs(qty), fullNote, ctx.userId],
     );
 
+    await logAudit(ctx.org.id, ctx.userId, "stock.issue", `${fullNote} qty -${qty}`);
     revalidatePath("/stock-issue");
     revalidatePath("/stock");
     revalidatePath("/products");
