@@ -180,7 +180,7 @@ export default function Pricing({
               องค์กรใหญ่ / เชน
             </h3>
             <p className="mt-2 max-w-3xl text-base leading-7 text-[var(--lp-muted,var(--muted2))]">
-              สินค้าไม่จำกัด · API เชื่อมระบบ · สร้าง Role เอง · ผู้ดูแลเฉพาะ · SLA — ราคาตามขนาด
+              สินค้าไม่จำกัด · API เชื่อมระบบ · หลายสาขาไม่จำกัด · ผู้ดูแลเฉพาะ · SLA — ราคาตามขนาด
             </p>
           </div>
           <Link

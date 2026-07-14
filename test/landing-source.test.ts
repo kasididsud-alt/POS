@@ -341,11 +341,12 @@ test("landing section boundaries each expose exactly one H2", async () => {
 test("Closing CTA keeps auth-aware primary routes", async () => {
   const source = await read("components/landing/LandingSections.tsx");
   const closingCta = exportedFunctionSource(source, "ClosingCta");
-  assert.match(
-    closingCta,
-    /const primaryHref = isAuthed \? "\/dashboard" : "\/signup";/,
-  );
+  // auth-aware ย้ายไปอยู่ใน <AuthPrimaryCta> (client) เพื่อให้หน้า landing เป็น static ได้ (P2-24)
+  assert.match(closingCta, /<AuthPrimaryCta/);
   assert.match(closingCta, /href="\/pricing"/);
+
+  const authCta = await read("components/landing/AuthCta.tsx");
+  assert.match(authCta, /authed \? "\/dashboard" : "\/signup"/);
 });
 
 test("Landing Footer renders the current year from the server", async () => {
@@ -440,18 +441,17 @@ test("index assembles the approved sections without fake proof", async () => {
     cursor = next;
   }
 
-  assert.match(page, /export default async function LandingPage\(\)/);
+  assert.match(page, /export default function LandingPage\(\)/);
   assert.doesNotMatch(page, /["']use client["']/);
   assert.match(page, /<div className="lp lp-home">/);
+  // P2-24: หน้า landing ต้องเป็น static — ห้ามอ่าน cookie/getAppContext ใน page
   assert.equal(
     [...page.matchAll(/getAppContext\(\)/g)].length,
-    1,
-    "getAppContext must be awaited exactly once",
+    0,
+    "landing must not read auth context (keeps the page static)",
   );
-  assert.match(page, /const ctx = await getAppContext\(\);/);
-  assert.match(page, /const isAuthed = Boolean\(ctx\);/);
-  assert.match(page, /<Hero isAuthed=\{isAuthed\} \/>/);
-  assert.match(page, /<ClosingCta isAuthed=\{isAuthed\} \/>/);
+  assert.match(page, /<Hero \/>/);
+  assert.match(page, /<ClosingCta \/>/);
   assert.match(page, /<Pricing tiers=\{PUBLIC_PLANS\} \/>/);
 
   assert.match(page, /alternates:\s*\{ canonical: "\/" \}/);
@@ -489,12 +489,13 @@ test("composed landing components preserve approved routes and anchors", async (
     read("components/landing/ProductShowcase.tsx"),
     read("components/landing/Pricing.tsx"),
   ]);
-  const authAwarePrimaryRoute =
-    /const primaryHref\s*=\s*isAuthed\s*\?\s*"\/dashboard"\s*:\s*"\/signup"\s*;/;
-
-  assert.match(hero, authAwarePrimaryRoute);
-  assert.match(sections, authAwarePrimaryRoute);
-  assert.match(hero, /href\s*=\s*["']\/login["']/);
+  // auth-aware CTA รวมศูนย์ที่ AuthCta.tsx (client) — Hero/ClosingCta แค่เรียกใช้ (P2-24)
+  const authCta = await read("components/landing/AuthCta.tsx");
+  assert.match(authCta, /authed \? "\/dashboard" : "\/signup"/);
+  assert.match(authCta, /href\s*=\s*["']\/login["']/);
+  assert.match(hero, /<AuthNavCta/);
+  assert.match(hero, /<AuthPrimaryCta/);
+  assert.match(sections, /<AuthPrimaryCta/);
   assert.match(hero, /href\s*=\s*["']\/pricing["']/);
   assert.match(pricing, /href\s*=\s*["']\/signup["']/);
 

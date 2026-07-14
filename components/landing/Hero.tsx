@@ -3,12 +3,9 @@ import Link from "next/link";
 import LandingIcon from "./LandingIcon";
 import LiveTicker from "./LiveTicker";
 import LogoMark from "./LogoMark";
+import { AuthNavCta, AuthPrimaryCta } from "./AuthCta";
 
-export default function Hero({
-  isAuthed,
-}: Readonly<{ isAuthed: boolean }>) {
-  const primaryHref = isAuthed ? "/dashboard" : "/signup";
-  const primaryLabel = isAuthed ? "ไปที่แดชบอร์ด" : "เริ่มใช้ฟรี";
+export default function Hero() {
 
   return (
     <>
@@ -35,14 +32,7 @@ export default function Hero({
             <Link href="/pricing" className="lp-nav-link hidden md:inline-flex">
               ราคา
             </Link>
-            {!isAuthed && (
-              <Link href="/login" className="lp-nav-link">
-                เข้าสู่ระบบ
-              </Link>
-            )}
-            <Link href={primaryHref} className="lp-header-cta">
-              {isAuthed ? "เข้าระบบจัดการ" : "เริ่มฟรี"}
-            </Link>
+            <AuthNavCta loginClass="lp-nav-link" ctaClass="lp-header-cta" />
           </nav>
         </div>
       </header>
@@ -81,10 +71,9 @@ export default function Hero({
                 ตั้งแต่หน้าร้านจนถึงหลังร้าน จบในระบบเดียว
               </p>
               <div className="lp-hero-actions">
-                <Link href={primaryHref} className="lp-btn-primary">
-                  {primaryLabel}
+                <AuthPrimaryCta className="lp-btn-primary">
                   <LandingIcon name="arrow" className="h-5 w-5" />
-                </Link>
+                </AuthPrimaryCta>
                 <a href="#product" className="lp-btn-secondary">
                   ดูระบบจริง
                 </a>

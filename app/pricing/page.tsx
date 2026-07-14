@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getAppContext } from "@/lib/auth";
+import { AuthNavCta, AuthPrimaryCta } from "@/components/landing/AuthCta";
 import { PLANS, PUBLIC_PLANS, type PlanId } from "@/lib/plans";
 import Pricing from "@/components/landing/Pricing";
 import PricingComparison from "./PricingComparison";
@@ -44,7 +44,7 @@ const PRICING_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "แพ็กองค์กร (เชน/บริษัท) ราคาเท่าไร?",
-    a: "คิดราคาตามขนาดการใช้งาน (จำนวนสาขา/ผู้ใช้) รวมฟีเจอร์พิเศษ เช่น API เชื่อมระบบ สร้าง Role เอง ผู้ดูแลเฉพาะ และ SLA · ติดต่อทีมงานเพื่อรับใบเสนอราคาที่พอดีกับองค์กรคุณ",
+    a: "คิดราคาตามขนาดการใช้งาน (จำนวนสาขา/ผู้ใช้) รวมฟีเจอร์พิเศษ เช่น API เชื่อมระบบ หลายสาขาไม่จำกัด ผู้ดูแลเฉพาะ และ SLA · ติดต่อทีมงานเพื่อรับใบเสนอราคาที่พอดีกับองค์กรคุณ",
   },
   {
     q: "รองรับหลายสาขาไหม?",
@@ -85,9 +85,7 @@ const PRICING_JSON_LD = {
   ],
 };
 
-export default async function PublicPricingPage() {
-  const ctx = await getAppContext();
-  const isAuthed = !!ctx?.org;
+export default function PublicPricingPage() {
 
   return (
     <div className="lp flex min-h-screen flex-col">
@@ -116,20 +114,7 @@ export default async function PublicPricingPage() {
             <span className="lp-mono hidden px-3 py-2 font-bold text-[var(--ink)] sm:inline">
               ราคา
             </span>
-            {isAuthed ? (
-              <Link href="/dashboard" className="lp-btn-solid">
-                เข้าระบบจัดการ
-              </Link>
-            ) : (
-              <>
-                <Link href="/login" className="lp-btn-ghost">
-                  เข้าสู่ระบบ
-                </Link>
-                <Link href="/signup" className="lp-btn-solid">
-                  เริ่มฟรี
-                </Link>
-              </>
-            )}
+            <AuthNavCta loginClass="lp-btn-ghost" ctaClass="lp-btn-solid" />
           </nav>
         </div>
       </header>
@@ -185,17 +170,7 @@ export default async function PublicPricingPage() {
             ตั้งร้านเสร็จใน 1 นาที ไม่ต้องใช้บัตรเครดิต ทดลองฟีเจอร์เต็มได้ 14 วัน
           </p>
           <div className="mt-2 flex flex-wrap justify-center gap-3">
-            <Link
-              href={isAuthed ? "/dashboard" : "/signup"}
-              className="lp-btn-solid"
-            >
-              {isAuthed ? "เข้าระบบจัดการ" : "เริ่มใช้ฟรี"}
-            </Link>
-            {!isAuthed && (
-              <Link href="/login" className="lp-btn-ghost">
-                เข้าสู่ระบบ
-              </Link>
-            )}
+            <AuthPrimaryCta className="lp-btn-solid" ghostClass="lp-btn-ghost" />
           </div>
         </div>
       </section>

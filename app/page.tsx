@@ -12,7 +12,6 @@ import {
 import Pricing from "@/components/landing/Pricing";
 import ProductShowcase from "@/components/landing/ProductShowcase";
 import { FAQ_ITEMS } from "@/components/landing/content";
-import { getAppContext } from "@/lib/auth";
 import { PLANS, PUBLIC_PLANS } from "@/lib/plans";
 
 export const metadata: Metadata = {
@@ -51,9 +50,7 @@ const JSON_LD = {
   ],
 };
 
-export default async function LandingPage() {
-  const ctx = await getAppContext();
-  const isAuthed = Boolean(ctx);
+export default function LandingPage() {
 
   return (
     <div className="lp lp-home">
@@ -63,7 +60,7 @@ export default async function LandingPage() {
           __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c"),
         }}
       />
-      <Hero isAuthed={isAuthed} />
+      <Hero />
       <main>
         <Outcomes />
         <ProductShowcase />
@@ -72,7 +69,7 @@ export default async function LandingPage() {
         <StoreFit />
         <Pricing tiers={PUBLIC_PLANS} />
         <LandingFaq />
-        <ClosingCta isAuthed={isAuthed} />
+        <ClosingCta />
       </main>
       <LandingFooter />
     </div>

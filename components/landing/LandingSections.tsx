@@ -1,5 +1,6 @@
 import Link from "next/link";
 import LandingIcon from "./LandingIcon";
+import { AuthPrimaryCta } from "./AuthCta";
 import LogoMark from "./LogoMark";
 import {
   FAQ_ITEMS,
@@ -240,11 +241,7 @@ export function LandingFaq() {
   );
 }
 
-export function ClosingCta({
-  isAuthed,
-}: Readonly<{ isAuthed: boolean }>) {
-  const primaryHref = isAuthed ? "/dashboard" : "/signup";
-  const primaryLabel = isAuthed ? "ไปที่แดชบอร์ด" : "เริ่มใช้ฟรี";
+export function ClosingCta() {
 
   return (
     <section
@@ -280,13 +277,9 @@ export function ClosingCta({
             </div>
 
             <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
-              <Link
-                href={primaryHref}
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--lp-mint)] px-6 py-3 text-base font-bold text-[var(--lp-night)] transition-[transform,opacity] duration-200 hover:-translate-y-0.5 hover:opacity-95"
-              >
-                {primaryLabel}
+              <AuthPrimaryCta className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--lp-mint)] px-6 py-3 text-base font-bold text-[var(--lp-night)] transition-[transform,opacity] duration-200 hover:-translate-y-0.5 hover:opacity-95">
                 <LandingIcon name="arrow" className="h-5 w-5" />
-              </Link>
+              </AuthPrimaryCta>
               <Link
                 href="/pricing"
                 className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/40 px-6 py-3 text-base font-bold text-white transition-opacity duration-200 hover:opacity-80"

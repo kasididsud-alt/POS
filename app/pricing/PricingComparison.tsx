@@ -57,7 +57,7 @@ const SECTIONS: Section[] = [
     rows: [
       { label: "เชื่อมต่อ integrations", vals: [false, false, true, true] },
       { label: "API / Webhook สำหรับนักพัฒนา", vals: [false, false, false, true] },
-      { label: "สร้าง Role เอง (custom สิทธิ์)", vals: [false, false, false, true] },
+      { label: "ผู้ดูแลเฉพาะ + SLA", vals: [false, false, false, true] },
       { label: "ผู้ดูแลเฉพาะ + SLA + อบรม", vals: [false, false, false, true] },
     ],
   },
