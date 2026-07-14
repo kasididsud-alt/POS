@@ -115,39 +115,27 @@ export function FeatureGrid() {
           </p>
         </div>
 
-        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:mt-12 lg:grid-cols-4">
-          {FEATURES.map((feature) => {
-            const isWide = feature.id === "inventory" || feature.id === "reports";
-
-            return (
-              <article
-                key={feature.id}
-                className={`lp-card min-h-64 overflow-hidden p-6 sm:p-7 ${
-                  isWide ? "lg:col-span-2" : ""
-                }`}
-              >
-                <div
-                  className={`flex h-full gap-6 ${
-                    isWide
-                      ? "flex-col justify-between sm:flex-row sm:items-end"
-                      : "flex-col"
-                  }`}
-                >
-                  <span className="lp-chip lp-chip-lg shrink-0" aria-hidden="true">
-                    <LandingIcon name={feature.icon} className="h-7 w-7" />
-                  </span>
-                  <div className={isWide ? "max-w-xl" : "mt-auto"}>
-                    <h3 className="text-xl font-bold text-[var(--lp-ink)] sm:text-2xl">
-                      {feature.title}
-                    </h3>
-                    <p className="mt-3 max-w-[68ch] text-base leading-7 text-[var(--lp-muted)]">
-                      {feature.description}
-                    </p>
-                  </div>
+        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:mt-12 lg:grid-cols-3">
+          {FEATURES.map((feature) => (
+            <article
+              key={feature.id}
+              className="lp-card overflow-hidden p-6 sm:p-7"
+            >
+              <div className="flex flex-col gap-6">
+                <span className="lp-chip lp-chip-lg shrink-0" aria-hidden="true">
+                  <LandingIcon name={feature.icon} className="h-7 w-7" />
+                </span>
+                <div>
+                  <h3 className="text-xl font-bold text-[var(--lp-ink)] sm:text-2xl">
+                    {feature.title}
+                  </h3>
+                  <p className="mt-3 max-w-[68ch] text-base leading-7 text-[var(--lp-muted)]">
+                    {feature.description}
+                  </p>
                 </div>
-              </article>
-            );
-          })}
+              </div>
+            </article>
+          ))}
         </div>
       </div>
     </section>

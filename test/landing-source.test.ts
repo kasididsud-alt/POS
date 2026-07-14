@@ -371,11 +371,25 @@ test("Landing Footer links guarantee 44 by 44 pixel targets", async () => {
   }
 });
 
-test("Feature bento uses wide cards only at desktop", async () => {
+test("Feature grid uses uniform top-aligned cards", async () => {
   const source = await read("components/landing/LandingSections.tsx");
   const featureGrid = exportedFunctionSource(source, "FeatureGrid");
-  assert.match(featureGrid, /isWide \? "lg:col-span-2" : ""/);
-  assert.doesNotMatch(featureGrid, /md:col-span-2/);
+  const grid = featureGrid.match(
+    /<div className="mt-10 grid[^"]*">/,
+  )?.[0];
+
+  assert.ok(grid, "FeatureGrid must render its responsive grid container");
+  assert.match(grid, /\bmd:grid-cols-2\b/);
+  assert.match(grid, /\blg:grid-cols-3\b/);
+  assert.match(
+    featureGrid,
+    /className="lp-card overflow-hidden p-6 sm:p-7"/,
+  );
+  assert.match(featureGrid, /className="flex flex-col gap-6"/);
+  assert.doesNotMatch(
+    featureGrid,
+    /\b(?:isWide|min-h-64|h-full|mt-auto|justify-between|col-span-\d+)\b/,
+  );
 });
 
 test("FAQ arrow transition respects reduced motion", async () => {
