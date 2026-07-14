@@ -11,7 +11,7 @@
     {
       "name": "dev-3020",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "-p", "3020"],
+      "runtimeArgs": ["run", "dev"],
       "port": 3020
     },
     {

@@ -20,6 +20,25 @@ function transport() {
   });
 }
 
+/** แจ้งข้อความติดต่อทีมงานไปอีเมลแอดมิน (best-effort — dev/ยังไม่ตั้ง Gmail จะ log แทน) */
+export async function sendContactNotification(
+  adminTo: string[],
+  input: { orgName: string; fromEmail: string; topic: string; message: string },
+): Promise<void> {
+  const body =
+    `ร้าน: ${input.orgName}\nจาก: ${input.fromEmail}\nหัวข้อ: ${input.topic}\n\n${input.message}`;
+  if (!mailerConfigured() || !adminTo.length) {
+    console.warn(`[mailer] ข้อความติดต่อทีมงาน (ยังไม่ส่งอีเมล):\n${body}`);
+    return;
+  }
+  await transport().sendMail({
+    from: `${BRAND} <${process.env.GMAIL_USER}>`,
+    to: adminTo.join(","),
+    subject: `[${BRAND}] ติดต่อทีมงาน: ${input.topic} — ${input.orgName}`,
+    text: body,
+  });
+}
+
 /** ส่งอีเมลลิงก์รีเซ็ตรหัสผ่าน (ลิงก์หมดอายุ 30 นาที) */
 export async function sendPasswordResetEmail(
   to: string,
