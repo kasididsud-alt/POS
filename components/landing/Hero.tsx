@@ -48,7 +48,11 @@ export default function Hero({
       </header>
 
       <section className="lp-hero" aria-labelledby="landing-hero-title">
-        <div className="lp-hero-media" aria-hidden="true">
+        <div
+          className="lp-hero-media"
+          aria-hidden="true"
+          style={{ position: "absolute" }}
+        >
           <Image
             src="/images/landing/retail-command-center.png"
             alt=""

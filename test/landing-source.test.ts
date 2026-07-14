@@ -32,10 +32,26 @@ test("Hero uses the selected local image accessibly", async () => {
   assert.ok(image, "Hero must render a next/image Image tag");
   assert.match(image, /retail-command-center\.png/);
   assert.match(image, /alt=""/);
+  assert.match(image, /\bfill(?:=\{true\})?(?=\s|\/>)/);
+  assert.doesNotMatch(image, /\bfill=\{false\}/);
   assert.match(image, /\bpreload(?:=\{true\})?(?=\s|\/>)/);
   assert.doesNotMatch(image, /\bpreload=\{false\}/);
   assert.doesNotMatch(image, /\bpriority\b/);
   assert.match(image, /sizes="100vw"/);
+});
+
+test("Hero fill image has an explicitly positioned parent", async () => {
+  const hero = await read("components/landing/Hero.tsx");
+  const mediaWrapper = hero.match(
+    /(<div\b(?=[^>]*className="lp-hero-media")[^>]*>)\s*<Image\b/,
+  )?.[1];
+
+  assert.ok(mediaWrapper, "Hero image wrapper must exist");
+  assert.match(
+    mediaWrapper,
+    /style=\{\{\s*position:\s*"(?:absolute|fixed|relative)"\s*\}\}/,
+    "next/image fill parent must use a supported position before CSS is evaluated",
+  );
 });
 
 test("Ticker loops, pauses, and supports reduced motion", async () => {
